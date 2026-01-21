@@ -308,20 +308,23 @@ class ChunkedSemanticSearch(SemanticSearch):
             self.docmap[doc_id] = doc['content']
 
             sections = split_by_headers(doc['content'])
-            
-            print(len(sections))
+
             if len(sections) > 0:
                 for section in sections:
-                    chunks = semantic_chunking(section['content'], 514, 50)
-                    all_chunks.extend(chunks)
+                    if len(section['content']) >  50:
+                        chunks = semantic_chunking(section['content'], 514, 50)
+                        all_chunks.extend(chunks)
 
-                    for chunk in chunks:
-                        metadata = {
-                            "doc_id": doc_id,
-                            "section": section['header'],
-                            "chunk_text": chunk,
-                        }
-                        chunk_metadata.append(metadata)
+                        for chunk in chunks:
+                            metadata = {
+                                "doc_id": doc_id,
+                                "section": section['header'],
+                                "chunk_text": chunk,
+                            }
+                            chunk_metadata.append(metadata)
+                    else:
+                        print(f"Skipping short section: {section['header']}")
+                        continue
 
         self.chunk_embeddings = self.model.encode(all_chunks, show_progress_bar=True)
         self.chunk_metadata = chunk_metadata
@@ -388,8 +391,19 @@ class ChunkedSemanticSearch(SemanticSearch):
         sorted_scores = sorted(
             chunk_scores , key=lambda item: item['score'], reverse=True
         )
+        seen_docs = set()
+        top_scores = []
         
-        top_scores = sorted_scores[:limit]
+        for data in sorted_scores:
+            doc_id = data['metadata']['doc_id']
+        
+            if doc_id not in seen_docs:
+                top_scores.append(data)
+                seen_docs.add(doc_id)
+                
+                if len(top_scores) >= limit:
+                    break
+                
         result = []
         
         for score in top_scores:
@@ -399,10 +413,10 @@ class ChunkedSemanticSearch(SemanticSearch):
                 result.append(
                     {
                         "id": med["id"],
-                        "Name": med["medicine_name"],
-                        "Therapeutic Area": med["therapeutic_area"],
+                        "name": med["medicine_name"],
+                        "therapeutic_area": med["therapeutic_area"],
                         "section": score['metadata']['section'],
-                        "text": score['metadata']['chunk_text'][0:100],
+                        "text": score['metadata']['chunk_text'],
                         "score": round(score['score'], 5)
                     }
                 )
