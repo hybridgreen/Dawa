@@ -4,17 +4,15 @@ from google import genai
 
 load_dotenv()
 
+
 class gemini_ai:
     def __init__(self, model):
-        
         api_key = os.environ.get("GEMINI_API_KEY")
-        print(f"Using key {api_key[:6]}...")
+        # print(f"Using key {api_key[:6]}...")
         self.client = genai.Client(api_key=api_key)
         self.model = model
-    
-    
+
     def spell(self, query: str):
-        
         prompt = f"""Fix any spelling errors in this medical query.
         Only correct obvious typos. 
         Don't change correctly spelled words or chemical words.
@@ -27,7 +25,6 @@ class gemini_ai:
         )
 
         return response.text
-
 
     def rewrite(self, query: str):
         prompt = f"""Rewrite this movie search query to be more specific and searchable.
@@ -56,7 +53,6 @@ class gemini_ai:
 
         return response.text
 
-
     def expand(self, query: str):
         prompt = f"""Expand this movie search query with related terms.
 
@@ -80,7 +76,6 @@ class gemini_ai:
 
         return response.text
 
-
     def rerank(self, query, doc):
         prompt = f"""Rate how well this result matches the search query.
 
@@ -88,7 +83,7 @@ class gemini_ai:
                 Drug name: {doc.get("name", "")}
                 Therapeutic Area: {doc.get("therapeutic_area", "")}
                 EMA Section: {doc.get("section", "")}
-                section content: {doc.get({'text'}, "")}
+                section content: {doc.get({"text"}, "")}
                 
 
                 Consider:
@@ -108,7 +103,6 @@ class gemini_ai:
 
         return float(response.text)
 
-
     def batch_rerank(self, query, docs):
         prompt = f"""Rank these movies by relevance to the search query.
             Query: "{query}"
@@ -123,7 +117,6 @@ class gemini_ai:
             contents=prompt,
         )
         return response.text
-
 
     def evaluate(self, query, results):
         prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
@@ -154,7 +147,6 @@ class gemini_ai:
 
         return response.text
 
-
     def augment(self, query, docs):
         prompt = f"""Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
             Query: {query}
@@ -172,7 +164,6 @@ class gemini_ai:
 
         return response.text
 
-
     def question(self, query, results):
         prompt = f"""Answer the following question based on the provided documents.
 
@@ -186,7 +177,7 @@ class gemini_ai:
     - Answer directly and concisely
     - Use only information from the documents
     - If the answer isn't in the documents, say "I don't have enough information"
-    - Cite sources when possible
+    - Cite sources when possible, the document IDs are EMA product numbers in the format EMEA/H/C/XXXXXX
 
     Guidance on types of questions:
     - Factual questions: Provide a direct answer
