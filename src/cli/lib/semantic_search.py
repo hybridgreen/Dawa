@@ -148,39 +148,13 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
     return chunks
 
 
-def hybrid_chunking(header: str, text: str, max_chunk_size: int, overlap: int):
-    text = text.strip()
-
-    if len(text) == 0:
-        return []
-
-    parts = re.split(r"(?<=[.!?])\s+", text)
-
-    if len(parts) == 1 and not parts[0].endswith(string.punctuation):
-        parts[0] = f"{header}\n\n{parts[0]}"
-        return parts
-
-    i = 0
-    chunks = [header]
-
-    while i < len(parts) - overlap:
-        chunk = parts[i : max_chunk_size + i]
-        s_chunk = " ".join(chunk)
-
-        chunks.append(s_chunk.strip())
-
-        i += max_chunk_size - overlap
-
-    return chunks
-
-
-def fetch_documents(med_data_url: str):
+def fetch_documents(med_data_url: str, n_rows:int = 20):
     print("Downloading Medicine Data Table")
     med_data_path = fetch_url(med_data_url, "medicine_data_en", "xlsx")
 
     if med_data_path:
         print("Medicine Data Table downloaded.")
-        data = pd.read_excel(med_data_path, skiprows=8, nrows=100)[
+        data = pd.read_excel(med_data_path, skiprows=8, nrows=n_rows)[
             [
                 "Name of medicine",
                 "EMA product number",
@@ -193,8 +167,9 @@ def fetch_documents(med_data_url: str):
 
     paths = []
     doc_metadata = {}
+    
     for idx, row in data.iterrows():
-        medicine_name: str = row["Name of medicine"]
+        medicine_name: str = row["Name of medicine"].split(" ")[0]
         ema_number: str = row["EMA product number"].split("/")[-1]
         try:
             print(f"Downloading data for {medicine_name} , number: {ema_number}...")
