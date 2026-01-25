@@ -8,9 +8,7 @@ from lib.semantic_search import (
     split_by_headers,
 )
 from lib.gemini import gemini_ai
-
-
-from lib.utils import process_all_pdfs, load_cached_docs, pdf_to_md
+from lib.utils import process_all_pdfs, load_cached_docs, pdf_to_md, refresh_documents
 
 app = typer.Typer(help="Semantic Search CLI")
 
@@ -32,6 +30,9 @@ def download_med_data(med_data_url: str, n_rows: Annotated[int, typer.Argument()
     """Download medical pdf data from the EMA Website - Only available in the EU/UK"""
     fetch_documents(med_data_url, n_rows)
 
+@app.command()
+def refresh():
+    refresh_documents()
 
 @app.command()
 def split_sections(filepath: str):

@@ -7,11 +7,14 @@ import pymupdf4llm
 from urllib3.util import Retry
 from requests.adapters import HTTPAdapter
 import time
-
+import pandas as pd
+from datetime import datetime
 
 stemmer = PorterStemmer()
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
+embeddings_path = cache_path / "drug_embeddings.npy"
+metadata_path = cache_path / "drug_metadata.json"
 documents_path = cache_path / "drug_docs.json"
 
 
@@ -102,18 +105,16 @@ def fetch_url(
                 for chunk in res.iter_content(chunk_size=8192):
                     f.write(chunk)
             return file_path
+        
         elif res.status_code == 429:
-            retry_after = res.headers.get("Retry-After")
-
-            if retry_after:
-                try:
-                    wait_time = int(retry_after)
-                except Exception:
-                    wait_time = 120
-            else:
+            try:
+                print(f"Rate limited")
+                retry_after = res.headers.get("Retry-After")
+                wait_time = int(retry_after)
+            except Exception:
                 wait_time = 60 * attempt
 
-            print(f"Rate limited. Waiting {wait_time}s...")
+            print(f"Waiting {wait_time}s...")
             time.sleep(wait_time)
         else:
             raise Exception(f"HTTP Error - {res.status_code}  ")
@@ -155,15 +156,17 @@ def process_all_pdfs(folder_path: str):
             if markdown:
                 ema_number = pdf_file.name.split("-")[0]
                 results.append({"id": str(ema_number), "content": markdown.lower()})
-                print(f"  ✓ Extracted {len(markdown)} characters")
+                print(f"✓ Extracted {len(markdown)} characters")
             else:
-                print("  ✗ Failed to extract")
+                print("✗ Failed to extract")
+                
 
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            print(f"✗ Error: {e}")
             continue
 
     print(f"\nSuccessfully processed {len(results)}/{len(pdf_files)} files")
+    
     with open(documents_path, "w") as f:
         json.dump(results, f, indent=2)
     return results
@@ -177,3 +180,59 @@ def load_cached_docs():
             return data
     except Exception as e:
         print(f"Error: {str(e)}")
+
+
+def refresh_documents():
+    
+    med_data_path = "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/medicine_data_en.xlsx"
+    
+    
+    with open(metadata_path, "r") as f:
+        doc_metadata: dict = json.load(f)
+
+    if med_data_path:
+        data = pd.read_excel(med_data_path, skiprows=8, nrows = len(doc_metadata.items()))[
+            [
+                "Name of medicine",
+                "EMA product number",
+                "Therapeutic area (MeSH)",
+                "Active substance",
+                "Revision number",
+                "Medicine URL",
+                "Last updated date"
+            ]
+        ]
+    
+    for idx, row in data.iterrows():
+        
+        medicine_name: str = row["Name of medicine"]
+        url_code = str(row["Medicine URL"]).split('/')[-1]
+        ema_number: str = row["EMA product number"].split("/")[-1]
+        
+        metadata = doc_metadata[ema_number]
+        
+        last_update =  datetime.strptime(row["Last updated date"], "%d/%m/%Y")
+        
+        if metadata['updated_at'] == None or last_update > datetime.now():
+        
+            try:
+                print(f"Updating data for {medicine_name}, number: {ema_number}...")
+                pdf_path = fetch_url(
+                    f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf",
+                    f"pdf/{ema_number}-en",
+                    "pdf",
+                )
+                
+                if pdf_path:
+                    print("Success")
+                    doc_metadata[ema_number]['updated_at'] = str(datetime.now())
+                    doc_metadata[ema_number]['last_update'] = str(last_update)
+                    
+
+            except Exception as e:
+                print(f"Failed to update {medicine_name}, number : {ema_number}")
+                continue
+
+    Path(metadata_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(metadata_path, "w") as f:
+        json.dump(doc_metadata, f, indent=2)
