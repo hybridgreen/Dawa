@@ -26,13 +26,10 @@ def embedquery(text: Annotated[str, typer.Argument(help="Text to be processed")]
 
 
 @app.command()
-def download_med_data(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 10):
+def download(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 10):
     """Download medical pdf data from the EMA Website - Only available in the EU/UK"""
     fetch_documents(med_data_url, n_rows)
 
-@app.command()
-def refresh():
-    refresh_documents()
 
 @app.command()
 def split_sections(filepath: str):

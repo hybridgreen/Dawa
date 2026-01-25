@@ -23,6 +23,39 @@ def verify_model():
     print(f"Max sequence length: {sem.model.max_seq_length}")
     pass
 
+import pymupdf
+
+def verify_pdf(pdf_path: str) -> bool:
+    
+    try:
+        file_size = Path(pdf_path).stat().st_size
+        if file_size < 1024: 
+            return False
+        
+        with open(pdf_path, 'rb') as f:
+            header = f.read(4)
+            if not header.startswith(b'%PDF'):
+                return False
+        
+        doc = pymupdf.open(pdf_path)
+        
+        if len(doc) == 0:
+            doc.close()
+            return False
+        
+        try:
+            first_page = doc[0]
+            _ = first_page.get_text("text")
+        except Exception:
+            doc.close()
+            return False
+        
+        doc.close()
+        return True
+        
+    except Exception as e:
+        print(f"PDF verification failed: {e}")
+        return False
 
 def embed_query_text(query: str):
     sem = SemanticSearch()
@@ -144,17 +177,35 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
 
     return chunks
 
+def construct_metadata(ema_number, row, updated):
 
-def fetch_documents(med_data_url: str, n_rows:int = 20):
+    metadata = {
+        "id": str(ema_number),
+        "medicine_name": row["Name of medicine"],
+        "therapeutic_area": str(row["Therapeutic area (MeSH)"])
+        .lower()
+        .split(";"),
+        "active_substance": str(row["Active substance"]).lower(),
+        "url": str(row["Medicine URL"]),
+        "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
+        "created_at": str(datetime.now()),
+        "updated_at": str(datetime.now()) if updated else None,
+    }
     
-    print("Downloading Medicine Data Table")
-    med_data_path = fetch_url(med_data_url, "medicine_data_en", "xlsx")
+    return metadata
 
+def fetch_documents(med_data_url: str, n_rows:int):
+    
+    dl_count = 0
     if n_rows == 0:
         n_rows = None
     
-    if med_data_path:
+    print("Downloading Medicine Data Table")
+    med_data_path = fetch_url(med_data_url, "medicine_data_en", "xlsx")
+    
+    if med_data_path and Path(med_data_path).exists():
         print("Medicine Data Table downloaded.")
+        
         data = pd.read_excel(med_data_path, skiprows=8, nrows=n_rows)[
             [
                 "Name of medicine",
@@ -166,67 +217,61 @@ def fetch_documents(med_data_url: str, n_rows:int = 20):
                 "Last updated date"
             ]
         ]
+    else:
+        raise Exception("Medical Data file download failed)")
 
-    paths = []
-    doc_metadata = {}
+    
+    if Path(metadata_path).exists():
+        try:
+            with open(metadata_path, "r") as f:
+                doc_metadata: dict = json.load(f)
+        except Exception:
+            pass
+    else:
+        doc_metadata = {}
     
     for idx, row in data.iterrows():
         
         medicine_name: str = row["Name of medicine"]
         url_code = str(row["Medicine URL"]).split('/')[-1]
         ema_number: str = row["EMA product number"].split("/")[-1]
-        try:
-            print(f"Downloading data for {medicine_name}, number: {ema_number}...")
-            pdf_path = fetch_url(
-                f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf",
-                f"pdf/{ema_number}-en",
-                "pdf",
-            )
+        last_update =  datetime.strptime(row["Last updated date"], "%d/%m/%Y")
+        metadata = None
+        
+        if ema_number in doc_metadata:
+            metadata = doc_metadata[ema_number]
+        
+        updated_at = datetime.fromisoformat(metadata['updated_at']) if metadata and metadata.get('updated_at') else None
+        
+        if not metadata or not updated_at or last_update > updated_at:
             
-            if pdf_path:
-                print("Success")
-                paths.append(pdf_path)
-                metadata = {
-                    "id": str(ema_number),
-                    "medicine_name": row["Name of medicine"],
-                    "therapeutic_area": str(row["Therapeutic area (MeSH)"])
-                    .lower()
-                    .split(";"),
-                    "active_substance": str(row["Active substance"]).lower(),
-                    "url": str(row["Medicine URL"]),
-                    "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
-                    "created_at": str(datetime.now()),
-                    "updated_at": str(datetime.now()),
-                }
+            try:
+                print(f"Downloading data for {medicine_name}, number: {ema_number}...")
+                pdf_path = fetch_url(
+                    f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf",
+                    f"pdf/{ema_number}-en",
+                    "pdf",
+                )
                 
-                doc_metadata[str(ema_number)] = metadata
-                
-        except Exception as e:
-            
-            print(f"Error - Downloading {medicine_name}, number: {ema_number}", str(e))
-            
-            metadata = {
-                    "id": str(ema_number),
-                    "medicine_name": row["Name of medicine"],
-                    "therapeutic_area": str(row["Therapeutic area (MeSH)"])
-                    .lower()
-                    .split(";"),
-                    "active_substance": str(row["Active substance"]).lower(),
-                    "url": str(row["Medicine URL"]),
-                    "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
-                    "created_at": str(datetime.now()),
-                    "updated_at": None,
-                }
-            
-            doc_metadata[str(ema_number)] = metadata
-            continue
+                if pdf_path :
+                    if not verify_pdf(pdf_path):
+                        raise Exception("Invalid pdf file - Use download command again") 
+                    
+                    doc_metadata[str(ema_number)] = construct_metadata(ema_number, row, True)
+                    print("Success")
+                    dl_count += 1  
+                    
+            except Exception as e:
+                print(f"Error - Downloading {medicine_name}, number: {ema_number}: {str(e)}")
+                doc_metadata[ema_number] = construct_metadata(ema_number, row, False)
+                continue
 
     Path(metadata_path).parent.mkdir(parents=True, exist_ok=True)
-    
     with open(metadata_path, "w") as f:
-        json.dump(doc_metadata, f, indent=2)
-    return paths
-
+        json.dump(doc_metadata, f, indent=2, default=str)
+    
+    print(f"Successfully downloaded {dl_count} docs")
+    
 
 class SemanticSearch:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
