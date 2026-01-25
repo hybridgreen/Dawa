@@ -11,9 +11,6 @@ import pandas as pd
 from datetime import datetime
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
-index_path = cache_path / "index.pkl"
-docmap_path = cache_path / "docmap.pkl"
-doc_length_path = cache_path / "doc_length.pkl"
 embeddings_path = cache_path / "drug_embeddings.npy"
 metadata_path = cache_path / "drug_metadata.json"
 chunk_metadata_path = cache_path / "chunk_metadata.json"
@@ -149,9 +146,13 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
 
 
 def fetch_documents(med_data_url: str, n_rows:int = 20):
+    
     print("Downloading Medicine Data Table")
     med_data_path = fetch_url(med_data_url, "medicine_data_en", "xlsx")
 
+    if n_rows == 0:
+        n_rows = None
+    
     if med_data_path:
         print("Medicine Data Table downloaded.")
         data = pd.read_excel(med_data_path, skiprows=8, nrows=n_rows)[
@@ -162,6 +163,7 @@ def fetch_documents(med_data_url: str, n_rows:int = 20):
                 "Active substance",
                 "Revision number",
                 "Medicine URL",
+                "Last updated date"
             ]
         ]
 
@@ -169,16 +171,18 @@ def fetch_documents(med_data_url: str, n_rows:int = 20):
     doc_metadata = {}
     
     for idx, row in data.iterrows():
-        medicine_name: str = row["Name of medicine"].split(" ")[0]
+        
+        medicine_name: str = row["Name of medicine"]
+        url_code = str(row["Medicine URL"]).split('/')[-1]
         ema_number: str = row["EMA product number"].split("/")[-1]
         try:
-            print(f"Downloading data for {medicine_name} , number: {ema_number}...")
+            print(f"Downloading data for {medicine_name}, number: {ema_number}...")
             pdf_path = fetch_url(
-                f"https://www.ema.europa.eu/en/documents/product-information/{medicine_name.lower()}-epar-product-information_en.pdf",
+                f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf",
                 f"pdf/{ema_number}-en",
                 "pdf",
             )
-
+            
             if pdf_path:
                 print("Success")
                 paths.append(pdf_path)
@@ -190,30 +194,37 @@ def fetch_documents(med_data_url: str, n_rows:int = 20):
                     .split(";"),
                     "active_substance": str(row["Active substance"]).lower(),
                     "url": str(row["Medicine URL"]),
+                    "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
                     "created_at": str(datetime.now()),
                     "updated_at": str(datetime.now()),
                 }
+                
                 doc_metadata[str(ema_number)] = metadata
+                
         except Exception as e:
+            
             print(f"Error - Downloading {medicine_name}, number: {ema_number}", str(e))
+            
             metadata = {
-                "id": str(ema_number),
-                "medicine_name": row["Name of medicine"],
-                "therapeutic_area": str(row["Therapeutic area (MeSH)"])
-                .lower()
-                .split(";"),
-                "active_substance": str(row["Active substance"]).lower(),
-                "url": str(row["Medicine URL"]),
-                "created_at": str(datetime.now()),
-                "updated_at": None,
-            }
+                    "id": str(ema_number),
+                    "medicine_name": row["Name of medicine"],
+                    "therapeutic_area": str(row["Therapeutic area (MeSH)"])
+                    .lower()
+                    .split(";"),
+                    "active_substance": str(row["Active substance"]).lower(),
+                    "url": str(row["Medicine URL"]),
+                    "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
+                    "created_at": str(datetime.now()),
+                    "updated_at": None,
+                }
+            
             doc_metadata[str(ema_number)] = metadata
             continue
 
     Path(metadata_path).parent.mkdir(parents=True, exist_ok=True)
+    
     with open(metadata_path, "w") as f:
         json.dump(doc_metadata, f, indent=2)
-
     return paths
 
 
@@ -288,7 +299,6 @@ class SemanticSearch:
                     "doc": current_doc[1],
                 }
             )
-
         return results
 
 
@@ -369,7 +379,7 @@ class ChunkedSemanticSearch(SemanticSearch):
             print("Building chunked embeddings")
             return self.build_chunk_embeddings(self.documents)
 
-    def search_chunks(self, query: str, limit: int = 10, therapeutic_area: str = ""):
+    def search_chunks(self, query: str, limit: int = 10, filter_t_a: str = ""):
         if self.chunk_embeddings is None or self.chunk_metadata is None:
             raise ValueError(
                 "Missing data. Call `load_or_create_chunk_embeddings` first."
@@ -382,24 +392,32 @@ class ChunkedSemanticSearch(SemanticSearch):
         embedded_q = self.generate_embedding(query)
 
         chunk_scores = []
-
+        filtered_indices = []
+        filtered_chunks = []
+        
         for idx, chunk_emb in enumerate(self.chunk_embeddings):
             doc_id: str = self.chunk_metadata[idx]["doc_id"]
             metadata = self.doc_metadata[doc_id]
+            
+            if filter_t_a.lower() in metadata['therapeutic_area']:
+                filtered_indices.append(idx)
+                filtered_chunks.append(chunk_emb)
+            
 
-            print(str(metadata["therapeutic_area"]))
-            if (
-                therapeutic_area.lower()
-                in str(metadata["therapeutic_area"]).lower().split()
-            ):
-                score = cosine_similarity(embedded_q, chunk_emb)
-                chunk_scores.append(
-                    {
-                        "chunk_idx": idx,
-                        "score": score,
-                        "metadata": self.chunk_metadata[idx],
-                    }
-                )
+        for idx in filtered_indices:
+            
+            chunk_emb = self.chunk_embeddings[idx]
+            doc_id: str = self.chunk_metadata[idx]["doc_id"]
+            metadata = self.doc_metadata[doc_id]
+            
+            score = cosine_similarity(embedded_q, chunk_emb)
+            chunk_scores.append(
+                {
+                    "chunk_idx": idx,
+                    "score": score,
+                    "metadata": self.chunk_metadata[idx],
+                }
+            )
 
         sorted_scores = sorted(
             chunk_scores, key=lambda item: item["score"], reverse=True
