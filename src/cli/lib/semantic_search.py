@@ -9,6 +9,8 @@ import string
 import pymupdf4llm
 import pandas as pd
 from datetime import datetime
+import pymupdf
+
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
 embeddings_path = cache_path / "drug_embeddings.npy"
@@ -23,7 +25,6 @@ def verify_model():
     print(f"Max sequence length: {sem.model.max_seq_length}")
     pass
 
-import pymupdf
 
 def verify_pdf(pdf_path: str) -> bool:
     
@@ -56,14 +57,6 @@ def verify_pdf(pdf_path: str) -> bool:
     except Exception as e:
         print(f"PDF verification failed: {e}")
         return False
-
-def embed_query_text(query: str):
-    sem = SemanticSearch()
-    embedding = sem.generate_embedding(query)
-
-    print(f"Query: {query}")
-    print(f"First 5 dimensions: {embedding[:5]}")
-    print(f"Shape: {embedding.shape}")
 
 
 def verify_embeddings():
@@ -102,17 +95,6 @@ def extract_markdown(pdf_path: str, ema_number: str):
         f.write(md_text)
 
     return md_text
-
-
-def save_file(data, filename: str, extension: str):
-    filepath = Path(__file__).parent.parent.parent.parent / (
-        f"./data/{filename}.{extension}"
-    )
-    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-    with open(filepath, "w") as f:
-        json.dump(data, f, indent=2)
-
-    return filepath
 
 
 def split_by_headers(markdown: str):
@@ -176,16 +158,20 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
         i += max_chunk_size - overlap
 
     return chunks
+    
 
 def construct_metadata(ema_number, row, updated):
 
     metadata = {
         "id": str(ema_number),
+        "category": str(row["Category"]).lower(),
         "medicine_name": row["Name of medicine"],
+        "status": row["Medicine status"].lower(),
         "therapeutic_area": str(row["Therapeutic area (MeSH)"])
         .lower()
         .split(";"),
         "active_substance": str(row["Active substance"]).lower(),
+        "atc_code": str(row["ATC code (human)"]).lower(),
         "url": str(row["Medicine URL"]),
         "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
         "created_at": str(datetime.now()),
@@ -193,6 +179,7 @@ def construct_metadata(ema_number, row, updated):
     }
     
     return metadata
+
 
 def fetch_documents(med_data_url: str, n_rows:int):
     
@@ -208,13 +195,16 @@ def fetch_documents(med_data_url: str, n_rows:int):
         
         data = pd.read_excel(med_data_path, skiprows=8, nrows=n_rows)[
             [
+                "Category",
+                "Medicine status",
                 "Name of medicine",
                 "EMA product number",
                 "Therapeutic area (MeSH)",
                 "Active substance",
+                "ATC code (human)",
                 "Revision number",
                 "Medicine URL",
-                "Last updated date"
+                "Last updated date",
             ]
         ]
     else:
@@ -424,7 +414,56 @@ class ChunkedSemanticSearch(SemanticSearch):
             print("Building chunked embeddings")
             return self.build_chunk_embeddings(self.documents)
 
-    def search_chunks(self, query: str, limit: int = 10, filter_t_a: str = ""):
+    def filter_chunks(
+        self,
+        category: str = None,
+        status: str = None,
+        therapeutic_area: str = None,
+        active_substance: str = None,
+        atc_code: str = None,
+    ) -> list[int]:
+    
+        filtered_indices = []
+        
+        for idx, chunk_meta in enumerate(self.chunk_metadata):
+            doc_id = chunk_meta['doc_id']
+            doc_meta = self.doc_metadata.get(doc_id)
+            
+            if not doc_meta:
+                continue
+            
+            if category and doc_meta.get('category') != category.lower():
+                continue
+            
+            if status and doc_meta.get('status') != status.lower():
+                continue
+            
+            if therapeutic_area:
+                doc_areas = doc_meta.get('therapeutic_area', [])
+                if therapeutic_area.lower() not in [area.lower() for area in doc_areas]:
+                    continue
+            
+            if active_substance:
+                substance = doc_meta.get('active_substance', '')
+                if active_substance.lower() not in substance.lower():
+                    continue
+            
+            if atc_code:
+                doc_atc:str = doc_meta.get('atc_code', '')
+                if not doc_atc or not doc_atc.startswith(atc_code):
+                    continue
+                
+            filtered_indices.append(idx)
+                
+        return filtered_indices
+
+    def filtered_search(self, query: str, limit: int = 10,
+        category: str = None,
+        therapeutic_area: str = None,
+        active_substance: str = None,
+        atc_code: str = None,
+        status: str = None):
+        
         if self.chunk_embeddings is None or self.chunk_metadata is None:
             raise ValueError(
                 "Missing data. Call `load_or_create_chunk_embeddings` first."
@@ -434,28 +473,30 @@ class ChunkedSemanticSearch(SemanticSearch):
             with open(metadata_path, "r") as f:
                 self.doc_metadata = json.load(f)
 
-        embedded_q = self.generate_embedding(query)
-
         chunk_scores = []
-        filtered_indices = []
-        filtered_chunks = []
         
-        for idx, chunk_emb in enumerate(self.chunk_embeddings):
-            doc_id: str = self.chunk_metadata[idx]["doc_id"]
-            metadata = self.doc_metadata[doc_id]
-            
-            if filter_t_a.lower() in metadata['therapeutic_area']:
-                filtered_indices.append(idx)
-                filtered_chunks.append(chunk_emb)
-            
-
+        filtered_indices = self.filter_chunks(
+            category=category,
+            therapeutic_area=therapeutic_area,
+            active_substance=active_substance,
+            atc_code=atc_code,
+            status= status)
+        
+        if len(filtered_indices):
+            print("No documents match the filter criteria")
+            return []
+        
+        print(f"{len(filtered_indices)} filtered docs")
+        
+        embedded_q = self.generate_embedding(query)
+        
         for idx in filtered_indices:
             
             chunk_emb = self.chunk_embeddings[idx]
             doc_id: str = self.chunk_metadata[idx]["doc_id"]
-            metadata = self.doc_metadata[doc_id]
             
             score = cosine_similarity(embedded_q, chunk_emb)
+            
             chunk_scores.append(
                 {
                     "chunk_idx": idx,
@@ -469,17 +510,20 @@ class ChunkedSemanticSearch(SemanticSearch):
         )
 
         seen_docs = set()
+        
         top_scores = []
 
         for data in sorted_scores:
+            
             doc_id = data["metadata"]["doc_id"]
-
+            print(doc_id)
             if doc_id not in seen_docs:
                 top_scores.append(data)
                 seen_docs.add(doc_id)
 
                 if len(top_scores) >= limit:
                     break
+
 
         result = []
 
@@ -491,7 +535,6 @@ class ChunkedSemanticSearch(SemanticSearch):
                     {
                         "id": med["id"],
                         "name": med["medicine_name"],
-                        "therapeutic_area": med["therapeutic_area"],
                         "section": score["metadata"]["section"],
                         "text": score["metadata"]["chunk_text"],
                         "score": round(score["score"], 5),

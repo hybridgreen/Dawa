@@ -3,12 +3,11 @@ from typing import Annotated
 from lib.semantic_search import (
     ChunkedSemanticSearch,
     verify_model,
-    embed_query_text,
     fetch_documents,
     split_by_headers,
 )
 from lib.gemini import gemini_ai
-from lib.utils import process_all_pdfs, load_cached_docs, pdf_to_md, refresh_documents
+from lib.utils import process_all_pdfs, load_cached_docs, pdf_to_md
 
 app = typer.Typer(help="Semantic Search CLI")
 
@@ -17,12 +16,6 @@ app = typer.Typer(help="Semantic Search CLI")
 def verify():
     """Verify the model"""
     verify_model()
-
-
-@app.command()
-def embedquery(text: Annotated[str, typer.Argument(help="Text to be processed")]):
-    """Checks embedding is working properly"""
-    embed_query_text(text)
 
 
 @app.command()
@@ -84,7 +77,13 @@ def query(query: str, limit: int):
 
 @app.command()
 def question(
-    query: str, limit: int, therapeutic_filter: Annotated[str, typer.Argument()] = ""
+    query: Annotated[str, typer.Argument(help="Search query")],
+    limit: Annotated[int, typer.Option("--limit", "-l" ,help="Number of results")] = 5,
+    category: Annotated[str, typer.Option("--category", "-c", help="Filter by category")] = "human",
+    therapeutic_area: Annotated[str, typer.Option("--therapeutic-area", "-t", help="Filter by therapeutic area")] = None,
+    active_substance: Annotated[str, typer.Option("--active-substance", "-a", help="Filter by active substance")] = None,
+    atc_code: Annotated[str, typer.Option("--atc", help="Filter by ATC code")] = None,
+    status: Annotated[str, typer.Option(help="Filter by status")] = None,
 ):
     """Search the datasets for relevant matches, uses AI to enhance the search and answer the question"""
 
@@ -103,9 +102,18 @@ def question(
         )
 
     sem = ChunkedSemanticSearch()
+    
     sem.load_or_create_chunk_embeddings(documents)
 
-    result = sem.search_chunks(query, limit, therapeutic_area=therapeutic_filter)
+    result = sem.filtered_search(
+        query=query,
+        limit=limit,
+        category=category,
+        therapeutic_area=therapeutic_area,
+        active_substance=active_substance,
+        atc_code=atc_code,
+        status=status
+    )
 
     ai_response = gemini.question(query, result)
 
