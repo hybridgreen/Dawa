@@ -1,13 +1,13 @@
 import typer
 from typing import Annotated
+from lib.gemini import gemini_ai
 from lib.semantic_search import (
     ChunkedSemanticSearch,
     verify_model,
-    fetch_documents,
     split_by_headers,
 )
-from lib.gemini import gemini_ai
-from lib.utils import process_all_pdfs, load_cached_docs, pdf_to_md
+from lib.medicine_data import download_med_data, download_pdfs, process_all_pdfs, pdf_to_md
+from lib.utils import load_cached_docs
 
 app = typer.Typer(help="Semantic Search CLI")
 
@@ -19,9 +19,11 @@ def verify():
 
 
 @app.command()
-def download(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 10):
+def download(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 0):
     """Download medical pdf data from the EMA Website - Only available in the EU/UK"""
-    fetch_documents(med_data_url, n_rows)
+    med_data_path = download_med_data(med_data_url)
+    
+    download_pdfs(med_data_path, n_rows)
 
 
 @app.command()

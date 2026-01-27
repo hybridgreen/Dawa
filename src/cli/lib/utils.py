@@ -3,12 +3,9 @@ import string
 from pathlib import Path
 from nltk.stem import PorterStemmer
 import requests
-import pymupdf4llm
 from urllib3.util import Retry
 from requests.adapters import HTTPAdapter
 import time
-import pandas as pd
-from datetime import datetime
 
 stemmer = PorterStemmer()
 
@@ -18,15 +15,14 @@ metadata_path = cache_path / "drug_metadata.json"
 documents_path = cache_path / "drug_docs.json"
 
 
-def load_file_data(filename: str, extension: str):
-    file_path = Path(__file__).parent.parent.joinpath(f"./data/{filename}.{extension}")
+def load_file_data(file_path: str | Path, extension: str):
 
     match extension:
         case "json":
             try:
                 with open(file_path, "r") as f:
                     data = json.load(f)
-                    print(f"Loaded {filename} data")
+                    print(f"Loaded medical data")
                     return data
             except Exception as e:
                 print(f"Error: {str(e)}")
@@ -76,7 +72,7 @@ def normalise_score(score, min_scores, max_scores):
     return (score - min_scores) / (max_scores - min_scores)
 
 
-def fetch_url(
+def fetch_pdf(
     url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
 ):
     file_path = Path(__file__).parent.parent.parent.parent / (
@@ -104,7 +100,7 @@ def fetch_url(
             with open(file_path, "wb") as f:
                 for chunk in res.iter_content(chunk_size=8192):
                     f.write(chunk)
-            return file_path
+            return str(file_path)
         
         elif res.status_code == 429:
             try:
@@ -120,56 +116,7 @@ def fetch_url(
             raise Exception(f"HTTP Error - {res.status_code}  ")
 
 
-def pdf_to_md(pdf_path: str):
-    pdf_file = Path(pdf_path)
 
-    if not pdf_file.exists():
-        print(f"File not found: {pdf_path}")
-        return
-    markdown = pymupdf4llm.to_markdown(pdf_file)
-    return markdown
-
-
-def process_all_pdfs(folder_path: str):
-    pdf_dir = Path(folder_path)
-
-    if not pdf_dir.exists():
-        print(f"Folder not found: {folder_path}")
-        return []
-
-    pdf_files = list(pdf_dir.glob("*.pdf")) + list(pdf_dir.glob("*.PDF"))
-
-    if not pdf_files:
-        print(f"No PDF files found in {folder_path}")
-        return []
-
-    print(f"Found {len(pdf_files)} PDF files")
-
-    results = []
-
-    for pdf_file in pdf_files:
-        try:
-            print(f"\nProcessing: {pdf_file.name}")
-
-            markdown = pdf_to_md(str(pdf_file)).lower()
-
-            if markdown:
-                ema_number = pdf_file.name.split("-")[0]
-                results.append({"id": str(ema_number), "content": markdown.lower()})
-                print(f"✓ Extracted {len(markdown)} characters")
-            else:
-                print("✗ Failed to extract")
-                
-
-        except Exception as e:
-            print(f"✗ Error: {e}")
-            continue
-
-    print(f"\nSuccessfully processed {len(results)}/{len(pdf_files)} files")
-    
-    with open(documents_path, "w") as f:
-        json.dump(results, f, indent=2)
-    return results
 
 
 def load_cached_docs():
