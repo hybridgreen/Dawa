@@ -1,14 +1,18 @@
 from typing import TypedDict, Literal, NotRequired, List
-from .utils import fetch_pdf
 from pathlib import Path
 import pymupdf
 import pymupdf4llm
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
+import requests
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
+import time
+
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
-metadata_path = cache_path / "drug_metadata.json"
+metadata_path = cache_path / "medicine_metadata.json"
 
 
 def extract_markdown(pdf_path: str, ema_number: str):
@@ -131,101 +135,153 @@ def download_med_data(med_data_url: str) -> str:
     else:
         raise Exception(f"Medical Data file download failed. HTTP-{res.status_code}")
 
-def download_pdfs(data_path: str ,n_rows:int):
+def download_pdfs(data_path: str, n_rows: int = 0):
+    
+    doc_metadata = load_existing_metadata(metadata_path)
+    
+    with open(data_path, 'r') as f:
+        data = json.load(f)['data']
+    
+    medicines_to_process = data[:n_rows] if n_rows > 0 else data
     
     dl_count = 0
-
-    try:
-        with open(data_path, "r") as f:
-            raw_data = json.load(f)
-            if raw_data:
-                print(f"Loaded medical data")
-            else:
-                raise Exception("Failed to load medical data")
-            
-    except Exception as e:
-        print(f"Error: {str(e)}")
     
-    meta = raw_data['meta']
-    data :  List[MedicineMetadata] = raw_data['data']
+    for raw in medicines_to_process:
+        try:
+            medicine_name = raw['name_of_medicine']
+            ema_number = raw['ema_product_number'].split("/")[-1]
+            url_code = raw['medicine_url'].split('/')[-1]
             
-    if Path(metadata_path).exists():
-        try:
-            with open(metadata_path, "r") as f:
-                doc_metadata: dict = json.load(f)
-        except Exception:
-            pass
-    else:
-        doc_metadata = {}
-    
-    if n_rows == 0:
-        n_rows = meta['total_records']
-
-    for data in data[:n_rows]:
-        
-        medicine_name = data['name_of_medicine']
-        url_code = data['medicine_url'].split('/')[-1]
-        ema_number: str = data['ema_product_number'].split("/")[-1]
-        try:
-            last_update =  datetime.strptime(data['last_updated_date'], "%d/%m/%Y")
+            if skip_download(ema_number, raw, doc_metadata):
+                print(f"Skipping {medicine_name} (up-to-date)")
+                continue
+            
+            print(f"Downloading {medicine_name} ({ema_number})...")
+            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
+            
+            pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
+            
+            if not pdf_path or not verify_pdf(pdf_path):
+                raise Exception("Download or verification failed")
+            
+            metadata = construct_metadata(raw)
+            metadata['updated_at'] = datetime.now().date().isoformat()
+            doc_metadata[ema_number] = metadata
+            
+            dl_count += 1
+            print(f"✓ Success")
+            
         except Exception as e:
-            last_update = None
-            
-        
-        if ema_number in doc_metadata:
-            metadata = doc_metadata[ema_number]
-        else:
-            metadata = None
-        
-        updated_at = datetime.fromisoformat(metadata['updated_at']) if metadata and metadata.get('updated_at') else None
-        
-        if not metadata or not updated_at or not last_update or last_update > updated_at:
+            print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {e}")
             
             try:
-                print(f"Downloading data for {medicine_name}, number: {ema_number}...")
-                pdf_path = fetch_pdf (
-                    f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf",
-                    f"pdf/{ema_number}-en",
-                    "pdf",
-                )
-                
-                if pdf_path :
-                    if not verify_pdf(pdf_path):
-                        raise Exception("Invalid pdf file - Use download command again") 
-                    data['created_at'] = str(datetime.now())
-                    data['updated_at'] = str(datetime.now())
-                    
-                    doc_metadata[str(ema_number)] = data
-                    
-                    print("Success")
-                    dl_count += 1  
-                    
-            except Exception as e:
-                print(f"Error - Downloading {medicine_name}, number: {ema_number}: {str(e)}")
-                data['created_at'] = str(datetime.now())
-                data['updated_at'] = None
-                doc_metadata[ema_number] = data
-                continue
+                metadata = construct_metadata(raw)
+                metadata['updated_at'] = None
+                doc_metadata[ema_number] = metadata
+            except:
+                pass 
+            
+            continue
+        
+    save_metadata(doc_metadata, metadata_path)
+    
+    print(f"\n✓ Downloaded {dl_count}/{len(medicines_to_process)} documents")
+    
+    return dl_count
 
+def fetch_pdf(
+    url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 3
+):
+    file_path = Path(__file__).parent.parent.parent.parent / (
+        f"./data/{filename}.{extension}"
+    )
+
+    headers = {"user-agent": "dawa/0.0.1"}
+
+    for attempt in range(1, max_retries+1):
+        res = requests.get(url, stream=True, timeout=30, headers=headers)
+        
+
+        if res.ok:
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "wb") as f:
+                for chunk in res.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return str(file_path)
+        
+        elif res.status_code == 429:
+            try:
+                print(f"Rate limited")
+                retry_after = res.headers.get("Retry-After")
+                wait_time = int(retry_after)
+            except Exception:
+                wait_time = 60 * attempt
+
+            print(f"Waiting {wait_time}s...")
+            time.sleep(wait_time)
+        else:
+            raise Exception(f"HTTP Error - {res.status_code}  ")
+
+
+def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
+    
+    if ema_number not in doc_metadata:
+        return False
+    
+    metadata = doc_metadata[ema_number]
+    
+    updated_at = metadata.get('updated_at')
+    if not updated_at:
+        return False 
+    
+    last_update_str = raw.get('last_updated_date', '').strip()
+    if not last_update_str:
+        return True
+    
+    try:
+        local_date = datetime.fromisoformat(updated_at).date()
+        source_date = datetime.strptime(last_update_str, "%d/%m/%Y").date()
+        
+        offset = timedelta(days=1) 
+        return source_date < local_date + offset
+        
+    except ValueError:
+        return False 
+
+
+def save_metadata(doc_metadata: dict, metadata_path: str):
+    
     Path(metadata_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(metadata_path, "w") as f:
+    with open(metadata_path, 'w') as f:
         json.dump(doc_metadata, f, indent=2, default=str)
-    
-    print(f"Successfully downloaded {dl_count} docs")
-    
+    print(f"Saved metadata to {metadata_path}")
+
+
+def load_existing_metadata(metadata_path: str) -> dict:
+    if Path(metadata_path).exists():
+        try:
+            with open(metadata_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load existing metadata: {e}")
+    return {}
+
 
 class MedicineMetadata(TypedDict):
     # Required fields
     category: Literal["Human", "Veterinary"]
     name_of_medicine: str
     ema_product_number: str
-    medicine_status: Literal["Authorised", "Withdrawn", "Suspended", "Refused", "Not authorised", "Opinion", "Application withdrawn", "Opinion under re-examination"]
+    status: Literal["Authorised", "Withdrawn", "Suspended", "Refused", "Not authorised", "Opinion", "Application withdrawn", "Opinion under re-examination"]
     active_substance: str
     therapeutic_area_mesh: str
     atc_code_human: str
     revision_number: str
-    last_updated_date: str
+    last_update: str
+    created_at: str
+    updated_at: str
     medicine_url: str
+
     
     # Optional/can be empty
     opinion_status: NotRequired[str]
@@ -239,27 +295,57 @@ class MedicineMetadata(TypedDict):
     marketing_authorisation_developer_applicant_holder: NotRequired[str]
     
     # Boolean flags
-    patient_safety: Literal["Yes", "No"]
-    accelerated_assessment: Literal["Yes", "No"]
-    additional_monitoring: Literal["Yes", "No"]
-    advanced_therapy: Literal["Yes", "No"]
-    biosimilar: Literal["Yes", "No"]
-    conditional_approval: Literal["Yes", "No"]
-    exceptional_circumstances: Literal["Yes", "No"]
-    generic_or_hybrid: Literal["Yes", "No"]
-    orphan_medicine: Literal["Yes", "No"]
-    prime_priority_medicine: Literal["Yes", "No"]
+    patient_safety: bool
+    accelerated_assessment: bool
+    additional_monitoring: bool
+    advanced_therapy: bool
+    biosimilar: bool
+    conditional_approval: bool
+    exceptional_circumstances: bool
+    generic_or_hybrid: bool
+    orphan_medicine: bool
+    prime_priority_medicine: bool
     
-    # Dates (optional - can be empty string)
-    european_commission_decision_date: NotRequired[str]
-    start_of_rolling_review_date: NotRequired[str]
-    start_of_evaluation_date: NotRequired[str]
-    opinion_adopted_date: NotRequired[str]
-    withdrawal_of_application_date: NotRequired[str]
-    marketing_authorisation_date: NotRequired[str]
-    refusal_of_marketing_authorisation_date: NotRequired[str]
-    withdrawal_expiry_revocation_lapse_of_marketing_authorisation_date: NotRequired[str]
-    suspension_of_marketing_authorisation_date: NotRequired[str]
-    first_published_date: NotRequired[str]
+
+def construct_metadata(raw: dict) -> MedicineMetadata:
     
-    
+    def to_bool(value) -> bool:
+        return str(value).strip() == 'Yes'
+
+    ema_number: str = raw['ema_product_number'].split("/")[-1]
+
+    return {
+        'id': ema_number,
+        'category': raw['category'],
+        'name': raw['name_of_medicine'],
+        'status': raw['medicine_status'],
+        'therapeutic_area': [
+            area.strip() 
+            for area in raw['therapeutic_area_mesh'].lower().split(';')
+            if area.strip()
+        ],
+        'active_substance': [
+            substance.strip() 
+            for substance in raw['active_substance'].lower().split(';')
+            if substance.strip()
+        ],
+        'atc_code': raw['atc_code_human'].lower(),
+        
+        # Convert all boolean flags
+        'patient_safety': to_bool(raw['patient_safety']),
+        'accelerated_assessment': to_bool(raw['accelerated_assessment']),
+        'additional_monitoring': to_bool(raw['additional_monitoring']),
+        'advanced_therapy': to_bool(raw['advanced_therapy']),
+        'biosimilar': to_bool(raw['biosimilar']),
+        'conditional_approval': to_bool(raw['conditional_approval']),
+        'exceptional_circumstances': to_bool(raw['exceptional_circumstances']),
+        'generic_or_hybrid': to_bool(raw['generic_or_hybrid']),
+        'orphan_medicine': to_bool(raw['orphan_medicine']),
+        'prime_priority_medicine': to_bool(raw['prime_priority_medicine']),
+        
+        'url': raw['medicine_url'],
+        'last_update': raw['last_updated_date'],
+        'created_at': datetime.now().isoformat(),
+        'updated_at': datetime.now().isoformat()
+    }
+

@@ -50,34 +50,6 @@ def build():
 
 
 @app.command()
-def query(query: str, limit: int):
-    """Search the datasets for relevant matches"""
-
-    gemini = gemini_ai("gemini-2.5-flash")
-
-    query = gemini.spell(query)
-
-    try:
-        documents = load_cached_docs()
-    except Exception:
-        print("No document found, rebuilding pdfs. ")
-
-    if not documents:
-        documents = process_all_pdfs(
-            "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf"
-        )
-
-    sem = ChunkedSemanticSearch()
-    sem.load_or_create_chunk_embeddings(documents)
-
-    result = sem.search_chunks(query, limit)
-
-    for i, res in enumerate(result):
-        print(f"Drug name: {res['name']}")
-        print(f"Section : {res['section']}")
-
-
-@app.command()
 def question(
     query: Annotated[str, typer.Argument(help="Search query")],
     limit: Annotated[int, typer.Option("--limit", "-l" ,help="Number of results")] = 5,

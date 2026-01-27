@@ -10,7 +10,7 @@ from datetime import datetime
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
 embeddings_path = cache_path / "drug_embeddings.npy"
-metadata_path = cache_path / "drug_metadata.json"
+metadata_path = cache_path / "medicine_metadata.json"
 chunk_metadata_path = cache_path / "chunk_metadata.json"
 chunk_embeddings_path = cache_path / "chunk_embeddings.npy"
         
@@ -94,27 +94,6 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
         i += max_chunk_size - overlap
 
     return chunks
-    
-
-def construct_metadata(ema_number, row, updated):
-
-    metadata = {
-        "id": str(ema_number),
-        "category": str(row["Category"]).lower(),
-        "medicine_name": row["Name of medicine"],
-        "status": row["Medicine status"].lower(),
-        "therapeutic_area": str(row["Therapeutic area (MeSH)"])
-        .lower()
-        .split(";"),
-        "active_substance": str(row["Active substance"]).lower(),
-        "atc_code": str(row["ATC code (human)"]).lower(),
-        "url": str(row["Medicine URL"]),
-        "last_update": str(datetime.strptime(row["Last updated date"], "%d/%m/%Y")),
-        "created_at": str(datetime.now()),
-        "updated_at": str(datetime.now()) if updated else None,
-    }
-    
-    return metadata
 
 
 class SemanticSearch:
