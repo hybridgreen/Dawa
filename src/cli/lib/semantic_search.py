@@ -5,7 +5,7 @@ import numpy as np
 import re
 import json
 import string
-from utils import load_cached_docs 
+from lib.medicine_data import load_cached_docs 
 
         
         
@@ -186,7 +186,7 @@ class ChunkedSemanticSearch(SemanticSearch):
         super().__init__(model_name)
         self.chunk_embeddings = None
         self.chunk_metadata = None
-        self.chunk_metadata_path = self.cache_path / f"chunk_metadata-{model_name}.json"
+        self.chunk_metadata_path = self.cache_path / f"chunk_metadata.json"
         self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings-{model_name}.npy"
 
     def build_chunk_embeddings(self, documents: list[dict]):
@@ -260,10 +260,8 @@ class ChunkedSemanticSearch(SemanticSearch):
             print("Building chunked embeddings")
             return self.build_chunk_embeddings(self.documents)
 
-    def __filter_chunks(
+    def filter_chunks(
         self,
-        category: str = None,
-        status: str = None,
         therapeutic_area: str = None,
         active_substance: str = None,
         atc_code: str = None,
@@ -277,12 +275,7 @@ class ChunkedSemanticSearch(SemanticSearch):
             
             if not doc_meta:
                 continue
-            
-            if category and doc_meta.get('category').lower() != category.lower():
-                continue
-            
-            if status and doc_meta.get('status').lower() != status.lower():
-                continue
+
             
             if therapeutic_area:
                 doc_areas = doc_meta.get('therapeutic_area', [])
@@ -307,8 +300,7 @@ class ChunkedSemanticSearch(SemanticSearch):
         category: str = None,
         therapeutic_area: str = None,
         active_substance: str = None,
-        atc_code: str = None,
-        status: str = None):
+        atc_code: str = None):
         
         if self.chunk_embeddings is None or self.chunk_metadata is None:
             raise ValueError(
@@ -321,14 +313,13 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         chunk_scores = []
         
-        filtered_indices = self.__filter_chunks(
+        filtered_indices = self.filter_chunks(
             category=category,
             therapeutic_area=therapeutic_area,
             active_substance=active_substance,
-            atc_code=atc_code,
-            status= status)
+            atc_code=atc_code)
         
-        if len(filtered_indices):
+        if len(filtered_indices) == 0:
             print("No documents match the filter criteria")
             return []
         
@@ -362,7 +353,6 @@ class ChunkedSemanticSearch(SemanticSearch):
         for data in sorted_scores:
             
             doc_id = data["metadata"]["doc_id"]
-            print(doc_id)
             if doc_id not in seen_docs:
                 top_scores.append(data)
                 seen_docs.add(doc_id)
@@ -380,7 +370,7 @@ class ChunkedSemanticSearch(SemanticSearch):
                 result.append(
                     {
                         "id": med["id"],
-                        "name": med["medicine_name"],
+                        "name": med["name"],
                         "section": score["metadata"]["section"],
                         "text": score["metadata"]["chunk_text"],
                         "score": round(score["score"], 5),

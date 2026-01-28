@@ -8,7 +8,6 @@ import requests
 import sys
 import time
 import random
-from utils import load_cached_docs
 
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
@@ -16,9 +15,19 @@ metadata_path = cache_path / "medicine_metadata.json"
 not_found_path = cache_path / "missing_medicine.json"
 documents_path = cache_path / "medicine_docs.json"
 
+
 class RateLimitException(Exception):
     pass
 
+
+def load_cached_docs():
+    try:
+        with open(documents_path, "r") as f:
+            data = json.load(f)
+            print(f"Loaded {len(data)} documents data")
+            return data
+    except Exception as e:
+        print(f"Error: {str(e)}")
 
 def extract_markdown(pdf_path: str, ema_number: str):
     md_text = pymupdf4llm.to_markdown(pdf_path)
@@ -67,17 +76,21 @@ def process_all_pdfs(folder_path: str, rebuild: bool = True):
         documents = []
 
     keys = [docs['id'] for docs in documents]
+    file_count = 0 
     
     for pdf_file in pdf_files:
         
         try:
             ema_number = pdf_file.name.split("-")[0]
+            file_count += 1
             
             if ema_number in keys:
                 print(f"Skipping document {ema_number}")
                 continue
             
-            print(f"\nProcessing: {pdf_file.name}")
+            print(f"\nProcessing file: {pdf_file.name} - {file_count}/{len(pdf_files)}")
+            
+            
             markdown = pdf_to_md(str(pdf_file)).lower()
 
             if markdown:
@@ -99,6 +112,7 @@ def process_all_pdfs(folder_path: str, rebuild: bool = True):
     print(f"\nSuccessfully processed {len(documents)}/{len(pdf_files)} files")
     save_metadata(documents, documents_path)
     print(f"✓ Saved documents to {documents_path}")
+
 
 def verify_pdf(pdf_path: str) -> bool:
     
