@@ -74,8 +74,19 @@ def question(
         documents = process_all_pdfs(
             "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf"
         )
+    #Current 384
+    model = 'all-MiniLM-L6-v2'
+    
+    # 768 dims, better quality
+    #model = 'sentence-transformers/all-mpnet-base-v2'
 
-    sem = ChunkedSemanticSearch()
+    # 1024 dims, medical-focused
+    #model = 'BAAI/bge-large-en-v1.5'
+
+    # 1024 dims, specifically for biomedical
+    #model = 'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb'
+    
+    sem = ChunkedSemanticSearch(model)
     
     sem.load_or_create_chunk_embeddings(documents)
 
