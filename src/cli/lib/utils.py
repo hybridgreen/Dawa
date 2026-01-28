@@ -9,7 +9,6 @@ stemmer = PorterStemmer()
 cache_path = Path(__file__).parent.parent.parent / "cache"
 embeddings_path = cache_path / "drug_embeddings.npy"
 metadata_path = cache_path / "drug_metadata.json"
-documents_path = cache_path / "drug_docs.json"
 
 def load_stopwords():
     stopwords_path = "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/stopwords.txt"
@@ -20,17 +19,6 @@ def load_stopwords():
             return words
     except Exception as e:
         print(f"Error loading stopwords: {str(e)}")
-
-
-def load_cached_docs():
-    try:
-        with open(documents_path, "r") as f:
-            data = json.load(f)
-            print(f"Loaded {len(data)} documents data")
-            return data
-    except Exception as e:
-        print(f"Error: {str(e)}")
-
 
 def tokenise_string(input: str):
     
