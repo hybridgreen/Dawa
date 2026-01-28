@@ -5,14 +5,8 @@ import numpy as np
 import re
 import json
 import string
-from datetime import datetime
+from utils import load_cached_docs 
 
-
-cache_path = Path(__file__).parent.parent.parent / "cache"
-embeddings_path = cache_path / "drug_embeddings.npy"
-metadata_path = cache_path / "medicine_metadata.json"
-chunk_metadata_path = cache_path / "chunk_metadata.json"
-chunk_embeddings_path = cache_path / "chunk_embeddings.npy"
         
         
 def verify_model():
@@ -21,7 +15,21 @@ def verify_model():
     print(f"Max sequence length: {sem.model.max_seq_length}")
     pass
 
+def verify_embeddings():
+    sem = SemanticSearch()
 
+    try:
+        documents = load_cached_docs()
+    except Exception:
+        print("Failed to load documents, exiting.")
+        
+    embeddings = sem.load_or_create_embeddings(documents)
+
+    print(f"Number of docs:   {len(documents)}")
+    print(
+        f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions"
+    )
+    
 def cosine_similarity(vec1, vec2):
     dot_product = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -103,6 +111,9 @@ class SemanticSearch:
         self.documents = None
         self.docmap = {}
         self.doc_metadata = {}
+        self.cache_path = Path(__file__).parent.parent.parent / "cache"
+        self.metadata_path = self.cache_path / "medicine_metadata.json"
+        self.embeddings_path = self.cache_path / f"medicine_embeddings-{model_name}.npy"
         print("Semantic Search Engine initialised")
 
     def generate_embedding(self, text: str):
@@ -124,9 +135,9 @@ class SemanticSearch:
 
         self.embbeddings = self.model.encode(content, show_progress_bar=True)
 
-        if not cache_path.is_dir():
-            os.mkdir(cache_path)
-        with open(embeddings_path, "wb") as f:
+        if not self.cache_path.is_dir():
+            os.mkdir(self.cache_path)
+        with open(self.embeddings_path, "wb") as f:
             np.save(f, self.embbeddings)
         return self.embbeddings
 
@@ -136,8 +147,8 @@ class SemanticSearch:
         for doc in self.documents:
             self.docmap[doc["id"]] = doc["content"]
 
-        if embeddings_path.exists():
-            with open(embeddings_path, "rb") as f:
+        if self.embeddings_path.exists():
+            with open(self.embeddings_path, "rb") as f:
                 self.embeddings = np.load(f)
                 if len(self.embeddings) == len(documents):
                     return self.embeddings
@@ -175,11 +186,13 @@ class ChunkedSemanticSearch(SemanticSearch):
         super().__init__(model_name)
         self.chunk_embeddings = None
         self.chunk_metadata = None
+        self.chunk_metadata_path = self.cache_path / f"chunk_metadata-{model_name}.json"
+        self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings-{model_name}.npy"
 
     def build_chunk_embeddings(self, documents: list[dict]):
         self.documents = documents
         print("Loading, metadata")
-        with open(metadata_path, "r") as f:
+        with open(self.metadata_path, "r") as f:
             self.doc_metadata = json.load(f)
 
         all_chunks = []
@@ -210,13 +223,13 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.chunk_embeddings = self.model.encode(all_chunks, show_progress_bar=True)
         self.chunk_metadata = chunk_metadata
 
-        if not cache_path.is_dir():
-            os.mkdir(cache_path)
+        if not self.cache_path.is_dir():
+            os.mkdir(self.cache_path)
 
-        with open(chunk_metadata_path, "w") as f:
+        with open(self.chunk_metadata_path, "w") as f:
             json.dump(chunk_metadata, f, indent=2)
 
-        with open(chunk_embeddings_path, "wb") as f:
+        with open(self.chunk_embeddings_path, "wb") as f:
             np.save(f, self.chunk_embeddings)
 
         print(f"Created {len(self.chunk_embeddings)}, chunked embeddings")
@@ -229,15 +242,15 @@ class ChunkedSemanticSearch(SemanticSearch):
             doc_id = str(doc["id"])
             self.docmap[doc_id] = doc["content"]
 
-        if chunk_metadata_path.exists() and chunk_embeddings_path.exists():
+        if self.chunk_metadata_path.exists() and self.chunk_embeddings_path.exists():
             print("Loading chunked embeddings")
-            with open(chunk_metadata_path, "r") as f:
+            with open(self.chunk_metadata_path, "r") as f:
                 self.chunk_metadata = json.load(f)
 
-            with open(chunk_embeddings_path, "rb") as f:
+            with open(self.chunk_embeddings_path, "rb") as f:
                 self.chunk_embeddings = np.load(f)
 
-            with open(metadata_path, "r") as f:
+            with open(self.metadata_path, "r") as f:
                 self.doc_metadata = json.load(f)
 
             print(f"Loaded {len(self.chunk_embeddings)} chunked embeddings")
@@ -247,7 +260,7 @@ class ChunkedSemanticSearch(SemanticSearch):
             print("Building chunked embeddings")
             return self.build_chunk_embeddings(self.documents)
 
-    def filter_chunks(
+    def __filter_chunks(
         self,
         category: str = None,
         status: str = None,
@@ -265,10 +278,10 @@ class ChunkedSemanticSearch(SemanticSearch):
             if not doc_meta:
                 continue
             
-            if category and doc_meta.get('category') != category.lower():
+            if category and doc_meta.get('category').lower() != category.lower():
                 continue
             
-            if status and doc_meta.get('status') != status.lower():
+            if status and doc_meta.get('status').lower() != status.lower():
                 continue
             
             if therapeutic_area:
@@ -277,8 +290,8 @@ class ChunkedSemanticSearch(SemanticSearch):
                     continue
             
             if active_substance:
-                substance = doc_meta.get('active_substance', '')
-                if active_substance.lower() not in substance.lower():
+                doc_substance = doc_meta.get('active_substance', [])
+                if active_substance.lower() not in [substance.lower() for substance in doc_substance]:
                     continue
             
             if atc_code:
@@ -303,12 +316,12 @@ class ChunkedSemanticSearch(SemanticSearch):
             )
 
         if not self.doc_metadata:
-            with open(metadata_path, "r") as f:
+            with open(self.metadata_path, "r") as f:
                 self.doc_metadata = json.load(f)
 
         chunk_scores = []
         
-        filtered_indices = self.filter_chunks(
+        filtered_indices = self.__filter_chunks(
             category=category,
             therapeutic_area=therapeutic_area,
             active_substance=active_substance,

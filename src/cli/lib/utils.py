@@ -11,41 +11,30 @@ embeddings_path = cache_path / "drug_embeddings.npy"
 metadata_path = cache_path / "drug_metadata.json"
 documents_path = cache_path / "drug_docs.json"
 
+def load_stopwords():
+    stopwords_path = "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/stopwords.txt"
+    try:
+        with open(stopwords_path, "r") as f:
+            data = f.read()
+            words = data.splitlines()
+            return words
+    except Exception as e:
+        print(f"Error loading stopwords: {str(e)}")
 
-def load_file_data(file_path: str | Path, extension: str):
 
-    match extension:
-        case "json":
-            try:
-                with open(file_path, "r") as f:
-                    data = json.load(f)
-                    print(f"Loaded medical data")
-                    return data
-            except Exception as e:
-                print(f"Error: {str(e)}")
-        case "txt":
-            try:
-                with open(file_path, "r") as f:
-                    data = f.read()
-                    words = data.splitlines()
-                    return words
-            except Exception as e:
-                print(f"Error: {str(e)}")
-
-        case "pdf":
-            try:
-                with open(file_path, "rb") as f:
-                    data = f.read()
-                    return data
-            except Exception as e:
-                print(f"Error: {str(e)}")
-
-        case _:
-            raise Exception("Invalid file extension")
+def load_cached_docs():
+    try:
+        with open(documents_path, "r") as f:
+            data = json.load(f)
+            print(f"Loaded {len(data)} documents data")
+            return data
+    except Exception as e:
+        print(f"Error: {str(e)}")
 
 
 def tokenise_string(input: str):
-    stopwords = load_file_data("stopwords", "txt")
+    
+    stopwords = load_stopwords()
     punct = string.punctuation
     input = list(input.lower())
     output = []
@@ -69,16 +58,5 @@ def normalise_score(score, min_scores, max_scores):
     return (score - min_scores) / (max_scores - min_scores)
 
 
-
-
-
-def load_cached_docs():
-    try:
-        with open(documents_path, "r") as f:
-            data = json.load(f)
-            print(f"Loaded {len(data)} documents data")
-            return data
-    except Exception as e:
-        print(f"Error: {str(e)}")
 
 
