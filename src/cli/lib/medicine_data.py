@@ -5,14 +5,18 @@ import pymupdf4llm
 import json
 from datetime import datetime, timedelta
 import requests
-import requests
-from urllib3.util import Retry
-from requests.adapters import HTTPAdapter
+import sys
 import time
+import random
 
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
 metadata_path = cache_path / "medicine_metadata.json"
+not_found_path = cache_path / "missing_medicine.json"
+documents_path = cache_path / "medicine_docs.json"
+
+class RateLimitException(Exception):
+    pass
 
 
 def extract_markdown(pdf_path: str, ema_number: str):
@@ -145,7 +149,9 @@ def download_pdfs(data_path: str, n_rows: int = 0):
     medicines_to_process = data[:n_rows] if n_rows > 0 else data
     
     dl_count = 0
-    
+    #start_time = datetime.now()
+    total_requests = 0
+    missing = []
     for raw in medicines_to_process:
         try:
             medicine_name = raw['name_of_medicine']
@@ -153,13 +159,16 @@ def download_pdfs(data_path: str, n_rows: int = 0):
             url_code = raw['medicine_url'].split('/')[-1]
             
             if skip_download(ema_number, raw, doc_metadata):
-                print(f"Skipping {medicine_name} (up-to-date)")
+                print(f"Skipping {medicine_name}")
                 continue
             
             print(f"Downloading {medicine_name} ({ema_number})...")
-            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
             
+            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
             pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
+            
+            total_requests += 1
+            #elapsed = (datetime.now() - start_time).total_seconds()
             
             if not pdf_path or not verify_pdf(pdf_path):
                 raise Exception("Download or verification failed")
@@ -171,37 +180,59 @@ def download_pdfs(data_path: str, n_rows: int = 0):
             dl_count += 1
             print(f"✓ Success")
             
+        except KeyboardInterrupt:
+            print(f"\n\n⚠️  Download interrupted by user")
+            save_metadata(doc_metadata, metadata_path)
+            print(f"✓ Saved progress to {metadata_path}")
+            sys.exit()
+            
         except Exception as e:
             print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {e}")
-            
             try:
                 metadata = construct_metadata(raw)
                 metadata['updated_at'] = None
                 doc_metadata[ema_number] = metadata
+                missing.append(metadata)
             except:
                 pass 
             
             continue
         
     save_metadata(doc_metadata, metadata_path)
+    save_metadata(missing, not_found_path )
     
     print(f"\n✓ Downloaded {dl_count}/{len(medicines_to_process)} documents")
     
     return dl_count
 
 def fetch_pdf(
-    url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 3
+    url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
 ):
     file_path = Path(__file__).parent.parent.parent.parent / (
         f"./data/{filename}.{extension}"
     )
 
+    RETRY_STATUS_CODES = {
+    408,  # Request Timeout
+    429,  # Too Many Requests
+    500,  # Internal Server Error
+    502,  # Bad Gateway
+    503,  # Service Unavailable
+    504,  # Gateway Timeout
+    522,  # Cloudflare: Connection Timed Out
+    524,  # Cloudflare: A Timeout Occurred
+}
     headers = {"user-agent": "dawa/0.0.1"}
+    
+    base_delay = 5
 
-    for attempt in range(1, max_retries+1):
+    for attempt in range(0, max_retries):
+        
+        if not attempt:
+            time.sleep(base_delay)
+        
         res = requests.get(url, stream=True, timeout=30, headers=headers)
         
-
         if res.ok:
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             with open(file_path, "wb") as f:
@@ -209,19 +240,19 @@ def fetch_pdf(
                     f.write(chunk)
             return str(file_path)
         
-        elif res.status_code == 429:
+        elif res.status_code in RETRY_STATUS_CODES:
+            print(f"HTTP Error - {res.status_code}")
             try:
-                print(f"Rate limited")
                 retry_after = res.headers.get("Retry-After")
                 wait_time = int(retry_after)
             except Exception:
-                wait_time = 60 * attempt
-
-            print(f"Waiting {wait_time}s...")
+                wait_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                print(f"Waiting {wait_time}s, before retry.")
             time.sleep(wait_time)
         else:
-            raise Exception(f"HTTP Error - {res.status_code}  ")
-
+            raise Exception(f"HTTP Error - {res.status_code}")
+    print("Max retries exceeded, skipping.")
+        
 
 def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
     
@@ -229,6 +260,14 @@ def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
         return False
     
     metadata = doc_metadata[ema_number]
+    
+    status= metadata.get('status')
+    if status != "Authorised":
+        return True
+    
+    category = metadata.get('category')
+    if category != "Human":
+        return True
     
     updated_at = metadata.get('updated_at')
     if not updated_at:
