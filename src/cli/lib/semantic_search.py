@@ -42,10 +42,13 @@ def cosine_similarity(vec1, vec2):
 
 
 def split_by_headers(markdown: str):
-    pattern = r"\*\*\s*\d+\.\d*\s*\*\*\s*\*\*[a-z,A-Z,\s]+\s*\*\*"
+    header_pattern = r"\*\*\s*\d+\.\d*\s*\*\*\s*\*\*[a-z,A-Z,\s]+\s*\*\*"
+    sub_pattern = r"\*\*\s*\d+\.\d*\s+[a-zA-Z\s]+\s*\*\*"
 
+    combined_pattern = f"{header_pattern}|{sub_pattern}"
+    
     header_positions = []
-    for match in re.finditer(pattern, markdown):
+    for match in re.finditer(combined_pattern, markdown):
         header_text = match.group()
         position = match.start()
         header_positions.append((position, header_text))
@@ -67,6 +70,9 @@ def split_by_headers(markdown: str):
         parts = [p.strip() for p in header.split("**") if p.strip()]
         section_title = parts[-1] if len(parts) > 1 else ""
 
+        if len(content) < 50:
+            continue
+        
         sections.append(
             {
                 "section_number": section_number,
@@ -113,7 +119,7 @@ class SemanticSearch:
         self.doc_metadata = {}
         self.cache_path = Path(__file__).parent.parent.parent / "cache"
         self.metadata_path = self.cache_path / "medicine_metadata.json"
-        self.embeddings_path = self.cache_path / f"medicine_embeddings-{model_name}.npy"
+        self.embeddings_path = self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
         print("Semantic Search Engine initialised")
 
     def generate_embedding(self, text: str):
@@ -187,7 +193,7 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.chunk_embeddings = None
         self.chunk_metadata = None
         self.chunk_metadata_path = self.cache_path / f"chunk_metadata.json"
-        self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings-{model_name}.npy"
+        self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
 
     def build_chunk_embeddings(self, documents: list[dict]):
         self.documents = documents
@@ -207,6 +213,7 @@ class ChunkedSemanticSearch(SemanticSearch):
             if len(sections) > 0:
                 for section in sections:
                     if len(section["content"]) > 20:
+                        
                         chunks = semantic_chunking(section["content"], 514, 50)
                         all_chunks.extend(chunks)
 

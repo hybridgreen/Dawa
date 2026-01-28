@@ -15,6 +15,7 @@ def rrf_score(rank, k=60):
 
 class HybridSearch(ChunkedSemanticSearch):
     def __init__(self ,documents,  model_name: str ="all-MiniLM-L6-v2"):
+        
         super().__init__(model_name)
         
         self.load_or_create_chunk_embeddings(documents)
