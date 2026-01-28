@@ -8,6 +8,7 @@ import requests
 import sys
 import time
 import random
+from utils import load_cached_docs
 
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
@@ -32,6 +33,7 @@ def extract_markdown(pdf_path: str, ema_number: str):
 
     return md_text
 
+
 def pdf_to_md(pdf_path: str):
     pdf_file = Path(pdf_path)
 
@@ -41,7 +43,9 @@ def pdf_to_md(pdf_path: str):
     markdown = pymupdf4llm.to_markdown(pdf_file)
     return markdown
 
-def process_all_pdfs(folder_path: str):
+
+def process_all_pdfs(folder_path: str, rebuild: bool = True):
+    
     pdf_dir = Path(folder_path)
 
     if not pdf_dir.exists():
@@ -56,31 +60,45 @@ def process_all_pdfs(folder_path: str):
 
     print(f"Found {len(pdf_files)} PDF files")
 
-    results = []
+    if not rebuild:
+        documents = load_cached_docs()
 
+    else:
+        documents = []
+
+    keys = [docs['id'] for docs in documents]
+    
     for pdf_file in pdf_files:
+        
         try:
+            ema_number = pdf_file.name.split("-")[0]
+            
+            if ema_number in keys:
+                print(f"Skipping document {ema_number}")
+                continue
+            
             print(f"\nProcessing: {pdf_file.name}")
-
             markdown = pdf_to_md(str(pdf_file)).lower()
 
             if markdown:
-                ema_number = pdf_file.name.split("-")[0]
-                results.append({"id": str(ema_number), "content": markdown.lower()})
+                documents.append({"id": str(ema_number), "content": markdown.lower()})
                 print(f"✓ Extracted {len(markdown)} characters")
             else:
                 print("✗ Failed to extract")
                 
-
+        except KeyboardInterrupt:
+            print(f"\n\n⚠️  Process interrupted by user")
+            save_metadata(documents, documents_path)
+            print(f"✓ Saved progress to {metadata_path}")
+            sys.exit()
+            
         except Exception as e:
             print(f"✗ Error: {e}")
             continue
 
-    print(f"\nSuccessfully processed {len(results)}/{len(pdf_files)} files")
-    
-    with open(documents_path, "w") as f:
-        json.dump(results, f, indent=2)
-    return results
+    print(f"\nSuccessfully processed {len(documents)}/{len(pdf_files)} files")
+    save_metadata(documents, documents_path)
+    print(f"✓ Saved documents to {documents_path}")
 
 def verify_pdf(pdf_path: str) -> bool:
     
@@ -114,6 +132,7 @@ def verify_pdf(pdf_path: str) -> bool:
         print(f"PDF verification failed: {e}")
         return False
 
+ 
 def download_med_data(med_data_url: str) -> str:
         
     print("Downloading Medicine Data")
@@ -138,6 +157,7 @@ def download_med_data(med_data_url: str) -> str:
         return med_data_path
     else:
         raise Exception(f"Medical Data file download failed. HTTP-{res.status_code}")
+
 
 def download_pdfs(data_path: str, n_rows: int = 0):
     
@@ -204,6 +224,7 @@ def download_pdfs(data_path: str, n_rows: int = 0):
     print(f"\n✓ Downloaded {dl_count}/{len(medicines_to_process)} documents")
     
     return dl_count
+
 
 def fetch_pdf(
     url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
@@ -382,6 +403,7 @@ def construct_metadata(raw: dict) -> MedicineMetadata:
         'orphan_medicine': to_bool(raw['orphan_medicine']),
         'prime_priority_medicine': to_bool(raw['prime_priority_medicine']),
         
+        'opinion_status': raw['opinion_status'],
         'url': raw['medicine_url'],
         'last_update': raw['last_updated_date'],
         'created_at': datetime.now().isoformat(),
