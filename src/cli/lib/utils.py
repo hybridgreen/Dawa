@@ -1,8 +1,6 @@
-import json
-import string
-from pathlib import Path
+import re
 from nltk.stem import PorterStemmer
-
+from pathlib import Path
 
 stemmer = PorterStemmer()
 
@@ -20,25 +18,44 @@ def load_stopwords():
     except Exception as e:
         print(f"Error loading stopwords: {str(e)}")
 
-def tokenise_string(input: str):
+
+
+stemmer = PorterStemmer()
+
+def tokenise_string(text: str) -> list[str]:
+    """
+    Tokenize and normalize text for BM25.
+    Handles markdown, medical symbols, and punctuation.
+    """
+    text = text.lower()
     
+    text = re.sub(r'\*+', ' ', text)
+    text = re.sub(r'\\n', ' ', text)
+    text = re.sub(r'\s+', ' ', text) 
+
+    
+    medical_symbols = {
+        'µg': 'microgram',
+        'µl': 'microliter',
+        'mg': 'milligram',
+        'ml': 'milliliter',
+        '°c': 'degrees celsius',
+        '≥': 'greater than equal',
+        '≤': 'less than equal',
+        '±': 'plus minus',
+        '%': 'percent'
+    }
+    
+    for symbol, word in medical_symbols.items():
+        text = text.replace(symbol, f' {word} ')
+    
+    tokens = re.findall(r'\b\w+\b', text)
     stopwords = load_stopwords()
-    punct = string.punctuation
-    input = list(input.lower())
-    output = []
-
-    for i in range(len(input)):
-        if input[i] not in punct:
-            output.append(input[i])
-
-    output = "".join(output).split(" ")
-
-    output = [t for t in output if t]
-    output = [t for t in output if t not in stopwords]
-    output = [stemmer.stem(t) for t in output]
-
-    return output
-
+    tokens = [t for t in tokens if t not in stopwords]
+    tokens = [t for t in tokens if len(t) > 1]
+    tokens = [stemmer.stem(t) for t in tokens]
+    
+    return tokens
 
 def normalise_score(score, min_scores, max_scores):
     if min_scores == max_scores:
