@@ -4,11 +4,37 @@ import os
 import numpy as np
 import re
 import json
-import string
+import html
 from lib.medicine_data import load_cached_docs 
 
         
+       
+def clean_for_embedding(text: str) -> str:
+    
+    text = re.sub(r'\*+', ' ', text)
+    text = re.sub(r'\\n', ' ', text)
+    text = re.sub(r'\s+', ' ', text) 
+    text = html.unescape(text) 
+    
+    replacements = {
+        'µg': 'micrograms',
+        'µl': 'microliters',
+        'mg': 'milligrams',
+        'ml': 'milliliters',
+        '°C': 'degrees celsius',
+        '≥': 'greater than or equal',
+        '≤': 'less than or equal',
+        '±': 'plus minus',
+        '%': 'percent'
+    }
+    
+    for symbol, word in replacements.items():
         
+        text = text.replace(symbol, word)
+    
+    return text 
+
+
 def verify_model():
     sem = SemanticSearch()
     print(f"Model loaded: {sem.model}")
@@ -58,7 +84,6 @@ def split_by_headers(markdown: str):
         print("No headers found!")
         return []
 
-
     sections = []
     for i, (pos, header) in enumerate(header_positions):
         
@@ -68,6 +93,7 @@ def split_by_headers(markdown: str):
             end_pos = len(markdown)
 
         content = markdown[pos:end_pos].strip()
+        cleaned_content = clean_for_embedding(content)
 
         section_number = header.split("**")[1].strip()
         parts = [p.strip() for p in header.split("**") if p.strip()]
@@ -76,33 +102,34 @@ def split_by_headers(markdown: str):
         if not is_spc_section(section_number, section_title):
             continue
         
-        if len(content) < 50:
-            continue
-        
         sections.append(
             {
                 "section_number": section_number,
                 "section_title": section_title,
-                "header": header,
-                "content": content,
+                "content": cleaned_content,
             }
         )
 
     return sections
+
 
 def is_spc_section(section_number: str, section_title: str) -> bool:
     
     title_lower = section_title.lower()
     
     valid_spc_sections = [
-        '1.', '2.', '3.',
+        #'1.',
+        #'2.',
+        '3.',
         '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.9',
         '5.1', '5.2', '5.3',
-        '6.1', '6.2', '6.3', '6.4', '6.5', '6.6',
-        '7.', '8.', '9.', '10.'
+        '6.1', #'6.2',
+        '6.3', '6.4', 
+        #'6.5', '6.6',
+        #'7.', '8.', '9.',# '10.'
     ]
     
-    pil_patterns = [
+    exclude = [
         'what',
         'What',
         'how to', 
@@ -112,27 +139,21 @@ def is_spc_section(section_number: str, section_title: str) -> bool:
         'information in braille',
     ]
     
-
     
     if section_number in valid_spc_sections:
-        if any(pattern in title_lower for pattern in pil_patterns):
+        if any(pattern in title_lower for pattern in exclude):
             return False
         return True
     
-    if any(pattern in title_lower for pattern in pil_patterns):
+    if any(pattern in title_lower for pattern in exclude):
             return False
     
-    if section_number.startswith('15'):
+    if section_number not in valid_spc_sections:
         return False
     
-    try:
-        num = float(section_number.rstrip('.'))
-        if num > 10:
-            return False
-    except:
-        pass
     
     return True
+
 
 def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
     text = text.strip()
@@ -141,9 +162,6 @@ def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
         return []
 
     parts = re.split(r"(?<=[.!?])\s+", text)
-
-    if len(parts) == 1 and not parts[0].endswith(string.punctuation):
-        return parts
 
     i = 0
     chunks = []
@@ -245,6 +263,7 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
 
     def build_chunk_embeddings(self, documents: list[dict]):
+        
         self.documents = documents
         print("Loading, metadata")
         with open(self.metadata_path, "r") as f:
@@ -255,26 +274,21 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         for doc in self.documents:
             doc_id: str = doc["id"]
-            self.docmap[doc_id] = doc["content"]
 
             sections = split_by_headers(doc["content"])
 
             if len(sections) > 0:
                 for section in sections:
-                    if len(section["content"]) > 20:
-                        
-                        chunks = semantic_chunking(section["content"], 514, 50)
-                        all_chunks.extend(chunks)
-
-                        for chunk in chunks:
-                            metadata = {
-                                "doc_id": doc_id,
-                                "section": section["header"],
-                                "chunk_text": chunk,
-                            }
-                            chunk_metadata.append(metadata)
-                    else:
-                        continue
+                    
+                        all_chunks.append(section)
+                        metadata = {
+                            "doc_id": doc_id,
+                            "section": f"{section["section_number"]} {section["section_title"]}",
+                            "chunk_text": section["content"],
+                        }
+                        chunk_metadata.append(metadata)
+            else:
+                continue
 
         self.chunk_embeddings = self.model.encode(all_chunks, show_progress_bar=True)
         self.chunk_metadata = chunk_metadata
