@@ -15,6 +15,7 @@ def verify_model():
     print(f"Max sequence length: {sem.model.max_seq_length}")
     pass
 
+
 def verify_embeddings():
     sem = SemanticSearch()
 
@@ -30,6 +31,7 @@ def verify_embeddings():
         f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions"
     )
     
+    
 def cosine_similarity(vec1, vec2):
     dot_product = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -42,9 +44,8 @@ def cosine_similarity(vec1, vec2):
 
 
 def split_by_headers(markdown: str):
-    header_pattern = r"\*\*\s*\d+\.\d*\s*\*\*\s*\*\*[a-z,A-Z,\s]+\s*\*\*"
+    header_pattern = r"\*\*\s*\d+\.\d*\s*\*\*\s*\*\*[a-zA-Z\s]+\s*\*\*"
     sub_pattern = r"\*\*\s*\d+\.\d*\s+[a-zA-Z\s]+\s*\*\*"
-
     combined_pattern = f"{header_pattern}|{sub_pattern}"
     
     header_positions = []
@@ -57,8 +58,10 @@ def split_by_headers(markdown: str):
         print("No headers found!")
         return []
 
+
     sections = []
     for i, (pos, header) in enumerate(header_positions):
+        
         if i + 1 < len(header_positions):
             end_pos = header_positions[i + 1][0]
         else:
@@ -70,6 +73,9 @@ def split_by_headers(markdown: str):
         parts = [p.strip() for p in header.split("**") if p.strip()]
         section_title = parts[-1] if len(parts) > 1 else ""
 
+        if not is_spc_section(section_number, section_title):
+            continue
+        
         if len(content) < 50:
             continue
         
@@ -84,6 +90,49 @@ def split_by_headers(markdown: str):
 
     return sections
 
+def is_spc_section(section_number: str, section_title: str) -> bool:
+    
+    title_lower = section_title.lower()
+    
+    valid_spc_sections = [
+        '1.', '2.', '3.',
+        '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.9',
+        '5.1', '5.2', '5.3',
+        '6.1', '6.2', '6.3', '6.4', '6.5', '6.6',
+        '7.', '8.', '9.', '10.'
+    ]
+    
+    pil_patterns = [
+        'what',
+        'What',
+        'how to', 
+        'possible',
+        'contents of the pack',
+        'instructions on use',
+        'information in braille',
+    ]
+    
+
+    
+    if section_number in valid_spc_sections:
+        if any(pattern in title_lower for pattern in pil_patterns):
+            return False
+        return True
+    
+    if any(pattern in title_lower for pattern in pil_patterns):
+            return False
+    
+    if section_number.startswith('15'):
+        return False
+    
+    try:
+        num = float(section_number.rstrip('.'))
+        if num > 10:
+            return False
+    except:
+        pass
+    
+    return True
 
 def semantic_chunking(text: str, max_chunk_size: int, overlap: int):
     text = text.strip()
