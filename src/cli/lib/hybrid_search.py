@@ -2,6 +2,9 @@ from rank_bm25 import BM25Okapi
 from .semantic_search import ChunkedSemanticSearch, cosine_similarity
 from .utils import normalise_score, tokenise_string
 from typing import DefaultDict
+import pickle
+from pathlib import Path
+
 
 def hybrid_score(bm25_score, semantic_score, alpha=0.5):
     return alpha * bm25_score + (1 - alpha) * semantic_score
@@ -11,16 +14,44 @@ def rrf_score(rank, k=60):
     return 1 / (k + rank)
 
 
+
 class HybridSearch(ChunkedSemanticSearch):
     def __init__(self ,documents,  model_name: str ="all-MiniLM-L6-v2"):
         super().__init__(model_name)
 
         self.index_path = self.cache_path / "bm25_index.pkl"
         self.load_or_create_chunk_embeddings(documents)
-               
+        self.bm25 = None
+    
+    def build_index(self):
         tokenized_texts = [tokenise_string(chunk['chunk_text']) for chunk in self.chunk_metadata]
         self.bm25 = BM25Okapi(tokenized_texts)
         
+        print(f"✓ BM25 index built")
+    
+        try:
+            Path(self.index_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(self.index_path, 'wb') as f:
+                pickle.dump(self.bm25, f, protocol=pickle.HIGHEST_PROTOCOL)
+            
+            print(f"✓ BM25 index saved to {self.index_path}")
+        except Exception as e:
+            print(f"Failed to save BM25 Index: {e}")
+
+    def load_index(self):
+        
+        if Path(self.index_path).exists():
+            try:
+                with open(self.index_path, 'rb') as f:
+                    self.bm25 = pickle.load(f)
+                
+                print(f"✓ BM25 index loaded from {self.index_path}")
+            except Exception as e:
+                print(f"Failed to load BM25 Index: {e}")
+        else:
+            self.build_index()
+
     
     def filtered_weighted_search(self,
         query,

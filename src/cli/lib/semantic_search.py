@@ -4,7 +4,6 @@ import os
 import numpy as np
 import re
 import json
-import html
 from lib.medicine_data import load_cached_docs 
 
         
@@ -12,25 +11,7 @@ from lib.medicine_data import load_cached_docs
 def clean_for_embedding(text: str) -> str:
     
     text = re.sub(r'\*+', ' ', text)
-    text = re.sub(r'\\n', ' ', text)
-    text = re.sub(r'\s+', ' ', text) 
-    text = html.unescape(text) 
-    
-    replacements = {
-        'µg': 'micrograms',
-        'µl': 'microliters',
-        'mg': 'milligrams',
-        'ml': 'milliliters',
-        '°C': 'degrees celsius',
-        '≥': 'greater than or equal',
-        '≤': 'less than or equal',
-        '±': 'plus minus',
-        '%': 'percent'
-    }
-    
-    for symbol, word in replacements.items():
-        
-        text = text.replace(symbol, word)
+    text = re.sub(r'\\u[a-z\d]+', ' ', text)
     
     return text 
 

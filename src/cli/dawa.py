@@ -85,7 +85,7 @@ def download(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 0):
     download_pdfs(med_data_path, n_rows)
 
 @app.command()
-def build_documents(rebuild: bool = True ):
+def build_documents(rebuild: Annotated[bool, typer.Option("--rebuild")] = False ):
     process_all_pdfs(
         "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf",
         rebuild = rebuild
@@ -115,7 +115,6 @@ def build_embeddings():
     
     sem = ChunkedSemanticSearch(model)
     sem.build_chunk_embeddings(documents)
-
 
 @app.command()
 def query(
@@ -182,8 +181,6 @@ def hybrid(
     except Exception:
         print("No document found, rebuilding pdfs.")
 
-    
-    
     if not documents:
         documents = process_all_pdfs(
             "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf"
@@ -191,6 +188,7 @@ def hybrid(
     
     
     search_engine = HybridSearch(documents= documents, model_name=model)
+    search_engine.load_index()
     
     print(f"Starting seach")
     
@@ -203,7 +201,7 @@ def hybrid(
     #    )
     
     results = search_engine.rrf_search(query,
-        k= 60,
+        k=60,
         limit=limit,
         therapeutic_area=therapeutic_area,
         active_substance=active_substance,
