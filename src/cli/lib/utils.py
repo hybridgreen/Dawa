@@ -32,20 +32,7 @@ def tokenise_string(text: str) -> list[str]:
     text = re.sub(r'\*+', ' ', text)
     tokens = re.findall(r'\b\w+\b', text)
     
-    medical_terms = [
-        'who',  # World Health Organisation
-        'fda',  # Food and Drug Administration
-        'ema',  # European Medicines Agency
-        'hiv',  # Human Immunodeficiency Virus
-        'aids', # Acquired Immune Deficiency Syndrome
-        'copd', # Chronic Obstructive Pulmonary Disease
-        'adhd', # Attention Deficit Hyperactivity Disorder
-        'iv',   # Intravenous
-        'im',   # Intramuscular
-        'po',   # Per os (oral)
-    ]
-    
-    stopwords = load_stopwords() - medical_terms
+    stopwords = load_stopwords()
     
     tokens = [t for t in tokens if t not in stopwords]
     tokens = [t for t in tokens if len(t) > 1]
