@@ -1,4 +1,4 @@
-from typing import TypedDict, Literal, NotRequired, List
+from typing import TypedDict, Literal, NotRequired
 from pathlib import Path
 import pymupdf
 import pymupdf4llm
@@ -8,6 +8,9 @@ import requests
 import sys
 import time
 import random
+import html
+import re
+from .utils import fix_encoding_errors
 
 
 cache_path = Path(__file__).parent.parent.parent / "cache"
@@ -28,6 +31,7 @@ def load_cached_docs():
             return data
     except Exception as e:
         print(f"Error: {str(e)}")
+
 
 def extract_markdown(pdf_path: str, ema_number: str):
     md_text = pymupdf4llm.to_markdown(pdf_path)
@@ -52,6 +56,73 @@ def pdf_to_md(pdf_path: str):
     markdown = pymupdf4llm.to_markdown(pdf_file)
     return markdown
 
+
+def clean_corpus(text:str):
+    
+    text = re.sub(r'\\n', ' ', text)
+    text = re.sub(r'\n', ' ', text)
+    text = re.sub(r'\s+', ' ', text) 
+    
+    text = fix_encoding_errors(text)
+        
+    text = html.unescape(text)
+    
+    try:
+        text = text.encode().decode('unicode_escape')
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        raise ValueError("Unable to decode text")
+
+    replacements = {  
+        # Degree (°)
+        '°c': ' degrees celsius ',
+        '°f': ' degrees fahrenheit ',
+        
+        # Math symbols
+        '≥': ' greater than or equal ',
+        '≤': ' less than or equal ',
+        '>': ' greater than ',
+        '<': ' less than ',
+        '±': ' plus minus ',
+        '×': ' times ',
+        '÷': ' divided by ',
+        '≈': ' approximately ',
+        '≠': ' not equal ',
+        
+        # Punctuation
+        '–': ' ',  # En dash
+        '—': ' ',  # Em dash
+        ''': "'",  # Smart quote
+        ''': "'",
+        '"': '"',
+        '"': '"',
+        '•': ' ',  # Bullet
+        '·': ' ',  # Middle dot
+        '…': ' ',  # Ellipsis
+        
+        # Greek letters
+        'α': ' alpha ',
+        'β': ' beta ',
+        'γ': ' gamma ',
+        'Δ': ' delta ',
+        
+        # Fractions
+        '½': ' one half ',
+        '¼': ' one quarter ',
+        '¾': ' three quarters ',
+        
+        # Superscripts
+        '²': ' squared ',
+        '³': ' cubed ',
+    }
+        
+    for symbol, word in replacements.items():
+        
+        text = text.replace(symbol, word)
+    
+    text = re.sub(r'\\u[a-z\d]+', ' ', text) #Remove any unprocessed unicode characters
+    
+    return text
+    
 
 def process_all_pdfs(folder_path: str, rebuild: bool = True):
     
@@ -94,7 +165,7 @@ def process_all_pdfs(folder_path: str, rebuild: bool = True):
             markdown = pdf_to_md(str(pdf_file)).lower()
 
             if markdown:
-                documents.append({"id": str(ema_number), "content": markdown.lower()})
+                documents.append({"id": str(ema_number), "content": clean_corpus(markdown)})
                 print(f"✓ Extracted {len(markdown)} characters")
             else:
                 print("✗ Failed to extract")
