@@ -4,16 +4,14 @@ import os
 import numpy as np
 import re
 import json
-from lib.medicine_data import load_cached_docs 
+from lib.medicine_data import load_cached_docs
 
-        
-       
+
 def clean_for_embedding(text: str) -> str:
-    
-    text = re.sub(r'\*+', ' ', text)
-    text = re.sub(r'\\u[a-z\d]+', ' ', text)
-    
-    return text 
+    text = re.sub(r"\*+", " ", text)
+    text = re.sub(r"\\u[a-z\d]+", " ", text)
+
+    return text
 
 
 def verify_model():
@@ -30,15 +28,15 @@ def verify_embeddings():
         documents = load_cached_docs()
     except Exception:
         print("Failed to load documents, exiting.")
-        
+
     embeddings = sem.load_or_create_embeddings(documents)
 
     print(f"Number of docs:   {len(documents)}")
     print(
         f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions"
     )
-    
-    
+
+
 def cosine_similarity(vec1, vec2):
     dot_product = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -54,7 +52,7 @@ def split_by_headers(markdown: str):
     header_pattern = r"\*\*\s*\d+\.\d*\s*\*\*\s*\*\*[a-zA-Z\s]+\s*\*\*"
     sub_pattern = r"\*\*\s*\d+\.\d*\s+[a-zA-Z\s]+\s*\*\*"
     combined_pattern = f"{header_pattern}|{sub_pattern}"
-    
+
     header_positions = []
     for match in re.finditer(combined_pattern, markdown):
         header_text = match.group()
@@ -67,7 +65,6 @@ def split_by_headers(markdown: str):
 
     sections = []
     for i, (pos, header) in enumerate(header_positions):
-        
         if i + 1 < len(header_positions):
             end_pos = header_positions[i + 1][0]
         else:
@@ -82,7 +79,7 @@ def split_by_headers(markdown: str):
 
         if not is_spc_section(section_number, section_title):
             continue
-        
+
         sections.append(
             {
                 "section_number": section_number,
@@ -95,44 +92,52 @@ def split_by_headers(markdown: str):
 
 
 def is_spc_section(section_number: str, section_title: str) -> bool:
-    
     title_lower = section_title.lower()
-    
+
     valid_spc_sections = [
         #'1.',
         #'2.',
-        '3.',
-        '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.9',
-        '5.1', '5.2', '5.3',
-        '6.1', #'6.2',
-        '6.3', '6.4', 
+        "3.",
+        "4.1",
+        "4.2",
+        "4.3",
+        "4.4",
+        "4.5",
+        "4.6",
+        "4.7",
+        "4.8",
+        "4.9",
+        "5.1",
+        "5.2",
+        "5.3",
+        "6.1",  #'6.2',
+        "6.3",
+        "6.4",
         #'6.5', '6.6',
         #'7.', '8.', '9.',# '10.'
     ]
-    
+
     exclude = [
-        'what',
-        'What',
-        'how to', 
-        'possible',
-        'contents of the pack',
-        'instructions on use',
-        'information in braille',
+        "what",
+        "What",
+        "how to",
+        "possible",
+        "contents of the pack",
+        "instructions on use",
+        "information in braille",
     ]
-    
-    
+
     if section_number in valid_spc_sections:
         if any(pattern in title_lower for pattern in exclude):
             return False
         return True
-    
+
     if any(pattern in title_lower for pattern in exclude):
-            return False
-    
+        return False
+
     if section_number not in valid_spc_sections:
         return False
-    
-    
+
     return True
 
 
@@ -167,7 +172,9 @@ class SemanticSearch:
         self.doc_metadata = {}
         self.cache_path = Path(__file__).parent.parent.parent / "cache"
         self.metadata_path = self.cache_path / "medicine_metadata.json"
-        self.embeddings_path = self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
+        self.embeddings_path = (
+            self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
+        )
         print("Semantic Search Engine initialised")
 
     def generate_embedding(self, text: str):
@@ -240,11 +247,12 @@ class ChunkedSemanticSearch(SemanticSearch):
         super().__init__(model_name)
         self.chunk_embeddings = None
         self.chunk_metadata = None
-        self.chunk_metadata_path = self.cache_path / f"chunk_metadata.json"
-        self.chunk_embeddings_path = self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
+        self.chunk_metadata_path = self.cache_path / "chunk_metadata.json"
+        self.chunk_embeddings_path = (
+            self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
+        )
 
     def build_chunk_embeddings(self, documents: list[dict]):
-        
         self.documents = documents
         print("Loading, metadata")
         with open(self.metadata_path, "r") as f:
@@ -260,14 +268,13 @@ class ChunkedSemanticSearch(SemanticSearch):
 
             if len(sections) > 0:
                 for section in sections:
-                    
-                        all_chunks.append(section)
-                        metadata = {
-                            "doc_id": doc_id,
-                            "section": f"{section["section_number"]} {section["section_title"]}",
-                            "chunk_text": section["content"],
-                        }
-                        chunk_metadata.append(metadata)
+                    all_chunks.append(section)
+                    metadata = {
+                        "doc_id": doc_id,
+                        "section": f"{section['section_number']} {section['section_title']}",
+                        "chunk_text": section["content"],
+                    }
+                    chunk_metadata.append(metadata)
             else:
                 continue
 
@@ -317,42 +324,44 @@ class ChunkedSemanticSearch(SemanticSearch):
         active_substance: str = None,
         atc_code: str = None,
     ) -> list[int]:
-    
         filtered_indices = []
-        
+
         for idx, chunk_meta in enumerate(self.chunk_metadata):
-            doc_id = chunk_meta['doc_id']
+            doc_id = chunk_meta["doc_id"]
             doc_meta = self.doc_metadata.get(doc_id)
-            
+
             if not doc_meta:
                 continue
 
-            
             if therapeutic_area:
-                doc_areas = doc_meta.get('therapeutic_area', [])
+                doc_areas = doc_meta.get("therapeutic_area", [])
                 if therapeutic_area.lower() not in [area.lower() for area in doc_areas]:
                     continue
-            
+
             if active_substance:
-                doc_substance = doc_meta.get('active_substance', [])
-                if active_substance.lower() not in [substance.lower() for substance in doc_substance]:
+                doc_substance = doc_meta.get("active_substance", [])
+                if active_substance.lower() not in [
+                    substance.lower() for substance in doc_substance
+                ]:
                     continue
-            
+
             if atc_code:
-                doc_atc:str = doc_meta.get('atc_code', '')
+                doc_atc: str = doc_meta.get("atc_code", "")
                 if not doc_atc or not doc_atc.startswith(atc_code):
                     continue
-                
+
             filtered_indices.append(idx)
-                
+
         return filtered_indices
 
-    def filtered_search(self, query: str, limit: int = 10,
-        category: str = None,
+    def filtered_search(
+        self,
+        query: str,
+        limit: int = 10,
         therapeutic_area: str = None,
         active_substance: str = None,
-        atc_code: str = None):
-        
+        atc_code: str = None,
+    ):
         if self.chunk_embeddings is None or self.chunk_metadata is None:
             raise ValueError(
                 "Missing data. Call `load_or_create_chunk_embeddings` first."
@@ -363,28 +372,27 @@ class ChunkedSemanticSearch(SemanticSearch):
                 self.doc_metadata = json.load(f)
 
         chunk_scores = []
-        
+
         filtered_indices = self.filter_chunks(
-            category=category,
             therapeutic_area=therapeutic_area,
             active_substance=active_substance,
-            atc_code=atc_code)
-        
+            atc_code=atc_code,
+        )
+
         if len(filtered_indices) == 0:
             print("No documents match the filter criteria")
             return []
-        
+
         print(f"{len(filtered_indices)} filtered docs")
-        
+
         embedded_q = self.generate_embedding(query)
-        
+
         for idx in filtered_indices:
-            
             chunk_emb = self.chunk_embeddings[idx]
             doc_id: str = self.chunk_metadata[idx]["doc_id"]
-            
+
             score = cosine_similarity(embedded_q, chunk_emb)
-            
+
             chunk_scores.append(
                 {
                     "chunk_idx": idx,
@@ -398,11 +406,10 @@ class ChunkedSemanticSearch(SemanticSearch):
         )
 
         seen_docs = set()
-        
+
         top_scores = []
 
         for data in sorted_scores:
-            
             doc_id = data["metadata"]["doc_id"]
             if doc_id not in seen_docs:
                 top_scores.append(data)
@@ -410,7 +417,6 @@ class ChunkedSemanticSearch(SemanticSearch):
 
                 if len(top_scores) >= limit:
                     break
-
 
         result = []
 
