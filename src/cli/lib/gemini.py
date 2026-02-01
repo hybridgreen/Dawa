@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 from google import genai
+from google.genai import types
 
 load_dotenv()
 
@@ -11,6 +12,40 @@ class gemini_ai:
         # print(f"Using key {api_key[:6]}...")
         self.client = genai.Client(api_key=api_key)
         self.model = model
+        self.system_prompt = """
+You are a pharmaceutical reference assistant for Dawa AI, helping pharmacists and doctors quickly find information from European Medicines Agency (EMA) product documentation.
+
+ROLE & CONTEXT:
+- You receive search results from EMA pharmaceutical documents
+- Your users are healthcare professionals (pharmacists and doctors)
+- Provide accurate, concise answers based solely on the provided documents
+
+RESPONSE GUIDELINES:
+1. Answer directly and concisely - healthcare professionals value brevity
+2. Use only information from the provided documents - never add external knowledge
+3. If the answer isn't in the documents, respond: "This information is not available in the provided documents."
+4. Maintain professional medical terminology appropriate for healthcare professionals
+5. If the search results are of poor quality to the query. Make suggestions on how to improve teh query.
+
+CITATION FORMAT:
+Always cite sources with clickable links using this format:
+
+[Medicine Name, Section X.X](https://www.ema.europa.eu/en/documents/product-information/{url_code}-epar-product-information_en.pdf)
+
+Where:
+- {url_code} comes from the document metadata
+- Section X.X is the specific section number (e.g., 4.2, 4.3)
+
+Example:
+Document metadata: {"name": "Zavesca", "section": "4.2", "url_code": "zavesca"}
+Your citation: [Zavesca, Section 4.2](https://www.ema.europa.eu/en/documents/product-information/zavesca-epar-product-information_en.pdf)
+
+IMPORTANT LIMITATIONS:
+- These are reference documents only - not medical advice
+- Do not make treatment recommendations beyond what's stated in the documents
+- For any clinical decision-making, remind users to consider the full prescribing information and patient context
+"""
+
 
     def spell(self, query: str):
         prompt = f"""Fix any spelling errors in this medical query.
@@ -22,29 +57,17 @@ class gemini_ai:
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
+            config= types.GenerateContentConfig(
+                system_instruction= self.system_prompt
+            )
+            
         )
 
         return response.text
+
 
     def rewrite(self, query: str):
-        prompt = f"""Rewrite this movie search query to be more specific and searchable.
-
-                    Original: "{query}"
-
-                    Consider:
-                    - Common movie knowledge (famous actors, popular films)
-                    - Genre conventions (horror = scary, animation = cartoon)
-                    - Keep it concise (under 10 words)
-                    - It should be a google style search query that's very specific
-                    - Don't use boolean logic
-
-                    Examples:
-
-                    - "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-                    - "movie about bear in london with marmalade" -> "Paddington London marmalade"
-                    - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-                    Rewritten query:"""
+        prompt = f""" """
 
         response = self.client.models.generate_content(
             model=self.model,
@@ -53,70 +76,23 @@ class gemini_ai:
 
         return response.text
 
-    def expand(self, query: str):
-        prompt = f"""Expand this movie search query with related terms.
-
-    Add synonyms and related concepts that might appear in movie descriptions.
-    Keep expansions relevant and focused.
-    This will be appended to the original query.
-
-    Examples:
-
-    - "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
-    - "action movie with bear" -> "action thriller bear chase fight adventure"
-    - "comedy with bear" -> "comedy funny bear humor lighthearted"
-
-    Query: "{query}"
-    """
-
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
-
-        return response.text
-
-    def rerank(self, query, doc):
-        prompt = f"""Rate how well this result matches the search query.
-
-                Query: "{query}"
-                Drug name: {doc.get("name", "")}
-                Therapeutic Area: {doc.get("therapeutic_area", "")}
-                EMA Section: {doc.get("section", "")}
-                section content: {doc.get({"text"}, "")}
-                
-
-                Consider:
-                    - Direct relevance to query
-                    - User intent (what they're looking for)
-                    - Content appropriateness
-
-                Rate 0-10 (10 = perfect match).
-                Give me ONLY the number in your response, no other text or explanation.
-
-                Score:"""
-        print("Crafting AI Response")
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
-
-        return float(response.text)
 
     def batch_rerank(self, query, docs):
-        prompt = f"""Rank these movies by relevance to the search query.
+        prompt = f"""Rank these search results by relevance to the search query.
             Query: "{query}"
-            Movies:
+            Medicine Data:
             {docs}
-            Return ONLY the IDs in order of relevance (best match first). Return as a raw JSON list without markdown , nothing else. For example:
-            [75, 12, 34, 2, 1]
             """
         print("Crafting AI Response")
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
+            config= types.GenerateContentConfig(
+                system_instruction= self.system_prompt
+            )
         )
         return response.text
+
 
     def evaluate(self, query, results):
         prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
@@ -147,22 +123,6 @@ class gemini_ai:
 
         return response.text
 
-    def augment(self, query, docs):
-        prompt = f"""Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
-            Query: {query}
-            Documents:
-            {docs}
-
-            Provide a comprehensive answer that addresses the query:"""
-
-        print("Crafting AI Response")
-
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
-
-        return response.text
 
     def question(self, query, results):
         prompt = f"""Answer the following question based on the provided documents.
@@ -173,12 +133,7 @@ class gemini_ai:
     {results}
 
     General instructions:
-    - Answer should be targeted to Dawa Users, Dawa is a medical drug assiatant.
-    - Answer directly and concisely
-    - Use only information from the documents
-    - If the answer isn't in the documents, say "I don't have enough information"
-    - Cite sources when possible, the document IDs are EMA product numbers in the format EMEA/H/C/XXXXXX
-
+    
     Guidance on types of questions:
     - Factual questions: Provide a direct answer
     - Analytical questions: Compare and contrast information from the documents
@@ -191,6 +146,9 @@ class gemini_ai:
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
+            config= types.GenerateContentConfig(
+                system_instruction= self.system_prompt
+            )
         )
 
         return response.text

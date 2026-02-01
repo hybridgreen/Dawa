@@ -187,7 +187,7 @@ class HybridSearch(ChunkedSemanticSearch):
             bm25_score = results[idx]["BM25"]
             sem_score = results[idx]["SEM"]
             chunk = self.chunk_metadata[idx]
-            doc_id = self.chunk_metadata[idx].get("doc_id", "")
+            doc_id = chunk.get("doc_id", "")
             med = self.doc_metadata[doc_id]
             rrf_rank = 0
             rrf_rank += rrf_score(bm25_score, k)
@@ -198,6 +198,7 @@ class HybridSearch(ChunkedSemanticSearch):
                 "name": med["name"],
                 "section": chunk["section"],
                 "text": chunk["chunk_text"],
+                "url_code": med.get('url_code', ' '),
                 "BM25": bm25_score,
                 "SEM": sem_score,
                 "RRF": rrf_rank,

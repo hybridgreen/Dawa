@@ -180,6 +180,7 @@ def download_pdfs(data_path: str, n_rows: int = 0):
             medicine_name = raw["name_of_medicine"]
             ema_number = raw["ema_product_number"].split("/")[-1]
             url_code = raw["medicine_url"].split("/")[-1]
+            raw["url_code"] = url_code
 
             if skip_download(ema_number, raw, doc_metadata):
                 print(f"Skipping {medicine_name}")
@@ -187,7 +188,7 @@ def download_pdfs(data_path: str, n_rows: int = 0):
 
             print(f"Downloading {medicine_name} ({ema_number})...")
 
-            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
+            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code}-epar-product-information_en.pdf"
             pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
 
             total_requests += 1
@@ -411,6 +412,7 @@ class MedicineMetadata(TypedDict):
     created_at: str
     updated_at: str
     medicine_url: str
+    url_code: str
 
     # Optional/can be empty
     opinion_status: NotRequired[str]
@@ -458,6 +460,8 @@ def construct_metadata(raw: dict) -> MedicineMetadata:
             if substance.strip()
         ],
         "atc_code": raw["atc_code_human"].lower(),
+        "url_code": raw["url_code"],
+        
         # Convert all boolean flags
         "patient_safety": to_bool(raw["patient_safety"]),
         "accelerated_assessment": to_bool(raw["accelerated_assessment"]),
