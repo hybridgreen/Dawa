@@ -23,29 +23,213 @@ class RateLimitException(Exception):
     pass
 
 
-def load_cached_docs():
+#DOWNLOADING
+
+def verify_pdf(pdf_path: str) -> bool:
     try:
-        with open(documents_path, "r") as f:
-            data = json.load(f)
-            print(f"Loaded {len(data)} documents data")
-            return data
+        file_size = Path(pdf_path).stat().st_size
+        if file_size < 1024:
+            return False
+
+        with open(pdf_path, "rb") as f:
+            header = f.read(4)
+            if not header.startswith(b"%PDF"):
+                return False
+
+        doc = pymupdf.open(pdf_path)
+
+        if len(doc) == 0:
+            doc.close()
+            return False
+
+        try:
+            first_page = doc[0]
+            _ = first_page.get_text("text")
+        except Exception:
+            doc.close()
+            return False
+
+        doc.close()
+        return True
+
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"PDF verification failed: {e}")
+        return False
 
 
-def extract_markdown(pdf_path: str, ema_number: str):
-    md_text = pymupdf4llm.to_markdown(pdf_path)
-
-    md_path = Path(__file__).parent.parent.parent.parent / (
-        f"./data/markdown/{ema_number}.md"
+def fetch_pdf(
+    url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
+):
+    file_path = Path(__file__).parent.parent.parent.parent / (
+        f"./data/{filename}.{extension}"
     )
-    Path(md_path).parent.mkdir(parents=True, exist_ok=True)
 
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(md_text)
+    RETRY_STATUS_CODES = {
+        408,  # Request Timeout
+        429,  # Too Many Requests
+        500,  # Internal Server Error
+        502,  # Bad Gateway
+        503,  # Service Unavailable
+        504,  # Gateway Timeout
+        522,  # Cloudflare: Connection Timed Out
+        524,  # Cloudflare: A Timeout Occurred
+    }
+    headers = {"user-agent": "dawa/0.0.1"}
 
-    return md_text
+    base_delay = 5
 
+    for attempt in range(0, max_retries):
+        if not attempt:
+            time.sleep(base_delay)
+
+        res = requests.get(url, stream=True, timeout=30, headers=headers)
+
+        if res.ok:
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "wb") as f:
+                for chunk in res.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return str(file_path)
+
+        elif res.status_code in RETRY_STATUS_CODES:
+            print(f"HTTP Error - {res.status_code}")
+            try:
+                retry_after = res.headers.get("Retry-After")
+                wait_time = int(retry_after)
+            except Exception:
+                wait_time = base_delay * (2**attempt) + random.uniform(0, 1)
+                print(f"Waiting {wait_time}s, before retry.")
+            time.sleep(wait_time)
+        else:
+            raise Exception(f"HTTP Error - {res.status_code:2.f}")
+    print("Max retries exceeded, skipping.")
+
+
+def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
+    if ema_number not in doc_metadata:
+        return False
+
+    metadata = doc_metadata[ema_number]
+
+    status = metadata.get("status")
+    if status != "Authorised":
+        return True
+
+    category = metadata.get("category")
+    if category != "Human":
+        return True
+
+    updated_at = metadata.get("updated_at")
+    if not updated_at:
+        return False
+
+    last_update_str = raw.get("last_updated_date", "").strip()
+    if not last_update_str:
+        return True
+
+    try:
+        local_date = datetime.fromisoformat(updated_at).date()
+        source_date = datetime.strptime(last_update_str, "%d/%m/%Y").date()
+
+        offset = timedelta(days=1)
+        return source_date < local_date + offset
+
+    except ValueError:
+        return False
+
+
+def download_med_data(med_data_url: str) -> str:
+    print("Downloading Medicine Data")
+    file_path = Path(__file__).parent.parent.parent.parent / (
+        "./data/medicine_data_en.json"
+    )
+    headers = {"user-agent": "dawa/0.0.1"}
+
+    res = requests.get(med_data_url, stream=True, timeout=30, headers=headers)
+
+    if res.ok:
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+
+        body = res.json()
+        with open(file_path, "w") as f:
+            json.dump(body, f, indent=2)
+
+        med_data_path = str(file_path)
+
+    if med_data_path and Path(med_data_path).exists():
+        print("Medicine Data downloaded.")
+        return med_data_path
+    else:
+        raise Exception(f"Medical Data file download failed. HTTP-{res.status_code}")
+
+
+def download_pdfs(data_path: str, n_rows: int = 0):
+    doc_metadata = load_metadata(metadata_path)
+
+    with open(data_path, "r") as f:
+        data = json.load(f)["data"]
+
+    medicines_to_process = data[:n_rows] if n_rows > 0 else data
+
+    dl_count = 0
+    # start_time = datetime.now()
+    total_requests = 0
+    missing = []
+    for raw in medicines_to_process:
+        try:
+            medicine_name = raw["name_of_medicine"]
+            ema_number = raw["ema_product_number"].split("/")[-1]
+            url_code = raw["medicine_url"].split("/")[-1]
+
+            if skip_download(ema_number, raw, doc_metadata):
+                print(f"Skipping {medicine_name}")
+                continue
+
+            print(f"Downloading {medicine_name} ({ema_number})...")
+
+            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
+            pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
+
+            total_requests += 1
+            # elapsed = (datetime.now() - start_time).total_seconds()
+
+            if not pdf_path or not verify_pdf(pdf_path):
+                raise Exception("Download or verification failed")
+
+            metadata = construct_metadata(raw)
+            metadata["updated_at"] = datetime.now().date().isoformat()
+            doc_metadata[ema_number] = metadata
+
+            dl_count += 1
+            print("✓ Success")
+
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Download interrupted by user")
+            save_metadata(doc_metadata, metadata_path)
+            print(f"✓ Saved progress to {metadata_path}")
+            sys.exit()
+
+        except Exception as e:
+            print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {e}")
+            try:
+                metadata = construct_metadata(raw)
+                metadata["updated_at"] = None
+                doc_metadata[ema_number] = metadata
+                missing.append(metadata)
+            except Exception as e:
+                print(f" ✗ Failed to save metadata: {e}")
+                pass
+
+            continue
+
+    save_metadata(doc_metadata, metadata_path)
+    save_metadata(missing, not_found_path)
+
+    print(f"\n✓ Downloaded {dl_count}/{len(medicines_to_process)} documents")
+
+    return dl_count
+
+#PROCESSING
 
 def pdf_to_md(pdf_path: str):
     pdf_file = Path(pdf_path)
@@ -174,210 +358,16 @@ def process_all_pdfs(folder_path: str, rebuild: bool = True):
     save_metadata(documents, documents_path)
     print(f"✓ Saved documents to {documents_path}")
 
+#PERSISTENCE
 
-def verify_pdf(pdf_path: str) -> bool:
+def load_cached_docs():
     try:
-        file_size = Path(pdf_path).stat().st_size
-        if file_size < 1024:
-            return False
-
-        with open(pdf_path, "rb") as f:
-            header = f.read(4)
-            if not header.startswith(b"%PDF"):
-                return False
-
-        doc = pymupdf.open(pdf_path)
-
-        if len(doc) == 0:
-            doc.close()
-            return False
-
-        try:
-            first_page = doc[0]
-            _ = first_page.get_text("text")
-        except Exception:
-            doc.close()
-            return False
-
-        doc.close()
-        return True
-
+        with open(documents_path, "r") as f:
+            data = json.load(f)
+            print(f"Loaded {len(data)} documents data")
+            return data
     except Exception as e:
-        print(f"PDF verification failed: {e}")
-        return False
-
-
-def download_med_data(med_data_url: str) -> str:
-    print("Downloading Medicine Data")
-    file_path = Path(__file__).parent.parent.parent.parent / (
-        "./data/medicine_data_en.json"
-    )
-    headers = {"user-agent": "dawa/0.0.1"}
-
-    res = requests.get(med_data_url, stream=True, timeout=30, headers=headers)
-
-    if res.ok:
-        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-
-        body = res.json()
-        with open(file_path, "w") as f:
-            json.dump(body, f, indent=2)
-
-        med_data_path = str(file_path)
-
-    if med_data_path and Path(med_data_path).exists():
-        print("Medicine Data downloaded.")
-        return med_data_path
-    else:
-        raise Exception(f"Medical Data file download failed. HTTP-{res.status_code}")
-
-
-def download_pdfs(data_path: str, n_rows: int = 0):
-    doc_metadata = load_existing_metadata(metadata_path)
-
-    with open(data_path, "r") as f:
-        data = json.load(f)["data"]
-
-    medicines_to_process = data[:n_rows] if n_rows > 0 else data
-
-    dl_count = 0
-    # start_time = datetime.now()
-    total_requests = 0
-    missing = []
-    for raw in medicines_to_process:
-        try:
-            medicine_name = raw["name_of_medicine"]
-            ema_number = raw["ema_product_number"].split("/")[-1]
-            url_code = raw["medicine_url"].split("/")[-1]
-
-            if skip_download(ema_number, raw, doc_metadata):
-                print(f"Skipping {medicine_name}")
-                continue
-
-            print(f"Downloading {medicine_name} ({ema_number})...")
-
-            pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code.lower()}-epar-product-information_en.pdf"
-            pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
-
-            total_requests += 1
-            # elapsed = (datetime.now() - start_time).total_seconds()
-
-            if not pdf_path or not verify_pdf(pdf_path):
-                raise Exception("Download or verification failed")
-
-            metadata = construct_metadata(raw)
-            metadata["updated_at"] = datetime.now().date().isoformat()
-            doc_metadata[ema_number] = metadata
-
-            dl_count += 1
-            print("✓ Success")
-
-        except KeyboardInterrupt:
-            print("\n\n⚠️  Download interrupted by user")
-            save_metadata(doc_metadata, metadata_path)
-            print(f"✓ Saved progress to {metadata_path}")
-            sys.exit()
-
-        except Exception as e:
-            print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {e}")
-            try:
-                metadata = construct_metadata(raw)
-                metadata["updated_at"] = None
-                doc_metadata[ema_number] = metadata
-                missing.append(metadata)
-            except Exception as e:
-                print(f" ✗ Failed to save metadata: {e}")
-                pass
-
-            continue
-
-    save_metadata(doc_metadata, metadata_path)
-    save_metadata(missing, not_found_path)
-
-    print(f"\n✓ Downloaded {dl_count}/{len(medicines_to_process)} documents")
-
-    return dl_count
-
-
-def fetch_pdf(
-    url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
-):
-    file_path = Path(__file__).parent.parent.parent.parent / (
-        f"./data/{filename}.{extension}"
-    )
-
-    RETRY_STATUS_CODES = {
-        408,  # Request Timeout
-        429,  # Too Many Requests
-        500,  # Internal Server Error
-        502,  # Bad Gateway
-        503,  # Service Unavailable
-        504,  # Gateway Timeout
-        522,  # Cloudflare: Connection Timed Out
-        524,  # Cloudflare: A Timeout Occurred
-    }
-    headers = {"user-agent": "dawa/0.0.1"}
-
-    base_delay = 5
-
-    for attempt in range(0, max_retries):
-        if not attempt:
-            time.sleep(base_delay)
-
-        res = requests.get(url, stream=True, timeout=30, headers=headers)
-
-        if res.ok:
-            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(file_path, "wb") as f:
-                for chunk in res.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return str(file_path)
-
-        elif res.status_code in RETRY_STATUS_CODES:
-            print(f"HTTP Error - {res.status_code}")
-            try:
-                retry_after = res.headers.get("Retry-After")
-                wait_time = int(retry_after)
-            except Exception:
-                wait_time = base_delay * (2**attempt) + random.uniform(0, 1)
-                print(f"Waiting {wait_time}s, before retry.")
-            time.sleep(wait_time)
-        else:
-            raise Exception(f"HTTP Error - {res.status_code}")
-    print("Max retries exceeded, skipping.")
-
-
-def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
-    if ema_number not in doc_metadata:
-        return False
-
-    metadata = doc_metadata[ema_number]
-
-    status = metadata.get("status")
-    if status != "Authorised":
-        return True
-
-    category = metadata.get("category")
-    if category != "Human":
-        return True
-
-    updated_at = metadata.get("updated_at")
-    if not updated_at:
-        return False
-
-    last_update_str = raw.get("last_updated_date", "").strip()
-    if not last_update_str:
-        return True
-
-    try:
-        local_date = datetime.fromisoformat(updated_at).date()
-        source_date = datetime.strptime(last_update_str, "%d/%m/%Y").date()
-
-        offset = timedelta(days=1)
-        return source_date < local_date + offset
-
-    except ValueError:
-        return False
+        print(f"Error: {str(e)}")
 
 
 def save_metadata(doc_metadata: dict, metadata_path: str):
@@ -387,7 +377,7 @@ def save_metadata(doc_metadata: dict, metadata_path: str):
     print(f"Saved metadata to {metadata_path}")
 
 
-def load_existing_metadata(metadata_path: str) -> dict:
+def load_metadata(metadata_path: str) -> dict:
     if Path(metadata_path).exists():
         try:
             with open(metadata_path, "r") as f:
@@ -396,6 +386,7 @@ def load_existing_metadata(metadata_path: str) -> dict:
             print(f"Warning: Could not load existing metadata: {e}")
     return {}
 
+#Classes 
 
 class MedicineMetadata(TypedDict):
     # Required fields
