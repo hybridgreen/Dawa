@@ -194,13 +194,13 @@ class SemanticSearch:
             self.docmap[int(doc["id"])] = doc["content"]
             content.append(f"{doc['content']}")
 
-        self.embbeddings = self.model.encode(content, show_progress_bar=True)
+        self.embeddings = self.model.encode(content, show_progress_bar=True)
 
         if not self.cache_path.is_dir():
             os.mkdir(self.cache_path)
         with open(self.embeddings_path, "wb") as f:
-            np.save(f, self.embbeddings)
-        return self.embbeddings
+            np.save(f, self.embeddings)
+        return self.embeddings
 
     def load_or_create_embeddings(self, documents):
         self.documents = documents
@@ -268,7 +268,7 @@ class ChunkedSemanticSearch(SemanticSearch):
 
             if len(sections) > 0:
                 for section in sections:
-                    all_chunks.append(section)
+                    all_chunks.append(section["content"])
                     metadata = {
                         "doc_id": doc_id,
                         "section": f"{section['section_number']} {section['section_title']}",

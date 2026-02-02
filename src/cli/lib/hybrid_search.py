@@ -21,6 +21,7 @@ class HybridSearch(ChunkedSemanticSearch):
         self.index_path = self.cache_path / "bm25_index.pkl"
         self.load_or_create_chunk_embeddings(documents)
         self.bm25 = None
+        self.load_index()
 
     def build_index(self):
         tokenized_texts = [
@@ -41,6 +42,7 @@ class HybridSearch(ChunkedSemanticSearch):
             print(f"Failed to save BM25 Index: {e}")
 
     def load_index(self):
+        
         if Path(self.index_path).exists():
             try:
                 with open(self.index_path, "rb") as f:
@@ -170,6 +172,7 @@ class HybridSearch(ChunkedSemanticSearch):
 
         for rank, (idx, score) in enumerate(bm25_sorted, 1):
             results[idx]["BM25"] = rank
+            results[idx]['BM25_score'] = score
 
         embedded_query = self.model.encode(query)
 
@@ -182,30 +185,35 @@ class HybridSearch(ChunkedSemanticSearch):
 
         for rank, (idx, score) in enumerate(sem_sorted, 1):
             results[idx]["SEM"] = rank
+            results[idx]['SEM_score'] = score
 
+        output = {}
         for idx in results:
-            bm25_score = results[idx]["BM25"]
-            sem_score = results[idx]["SEM"]
             chunk = self.chunk_metadata[idx]
             doc_id = chunk.get("doc_id", "")
             med = self.doc_metadata[doc_id]
+            
             rrf_rank = 0
-            rrf_rank += rrf_score(bm25_score, k)
-            rrf_rank += rrf_score(sem_score, k)
+            rrf_rank += rrf_score(results[idx]["BM25"], k)
+            rrf_rank += rrf_score(results[idx]["SEM"], k)
+            sem_score = results[idx]["SEM_score"]
+            bm_score = results[idx]["BM25_score"]
 
-            results[idx] = {
+            output[idx] = {
                 "id": doc_id,
                 "name": med["name"],
                 "section": chunk["section"],
                 "text": chunk["chunk_text"],
                 "url_code": med.get('url_code', ' '),
-                "BM25": bm25_score,
                 "SEM": sem_score,
-                "RRF": rrf_rank,
+                "BM25": bm_score,
+                "RRF": rrf_rank
             }
 
         sorted_docs = sorted(
-            results.items(), key=lambda item: item[1]["RRF"], reverse=True
+            output.items(), key=lambda item: item[1]["RRF"], reverse=True
         )
+        
+        sorted_docs = [doc[1] for doc in sorted_docs]
 
         return sorted_docs[:limit]

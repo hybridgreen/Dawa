@@ -16,6 +16,17 @@ from lib.gemini import gemini_ai
 app = typer.Typer(help="Semantic Search CLI")
 gemini = gemini_ai("gemini-2.5-flash")
 
+# Starter model, 384 dims
+#model = "all-MiniLM-L6-v2"
+
+# 768 dims, better quality
+# model = 'sentence-transformers/all-mpnet-base-v2'
+
+# 1024 dims, medical-focused
+model = 'BAAI/bge-large-en-v1.5'
+
+# 1024 dims, specifically for biomedical
+#model = 'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb'
 
 @app.command()
 def verify():
@@ -49,8 +60,11 @@ def tokenise(text: str):
 
 
 @app.command()
-def download(med_data_url: str, n_rows: Annotated[int, typer.Argument()] = 0):
+def download(n_rows: Annotated[int, typer.Argument()] = 0):
     """Download medical pdf data from the EMA Website - Only available in the EU/UK"""
+    
+    med_data_url = "https://www.ema.europa.eu/en/documents/report/medicines-output-medicines_json-report_en.json"
+    
     med_data_path = download_med_data(med_data_url)
 
     download_pdfs(med_data_path, n_rows)
@@ -78,18 +92,6 @@ def build_embeddings():
 
     """
     documents = load_cached_docs()
-
-    # Starter model, 384 dims
-    model = "all-MiniLM-L6-v2"
-
-    # 768 dims, better quality
-    # model = 'sentence-transformers/all-mpnet-base-v2'
-
-    # 1024 dims, medical-focused
-    # model = 'BAAI/bge-large-en-v1.5'
-
-    # 1024 dims, specifically for biomedical
-    # model = 'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb'
 
     if not documents:
         documents = process_all_pdfs(
@@ -125,7 +127,7 @@ def search(
     for idx, res in enumerate(results, 1):
         print(f"{idx}. Medicine name: {res['name']}")
         print(f"    Retrieved section: {res['section']}")
-        print(f"    Score: {res['score']}")
+        print(f"    RRF Score: {res['RRF']}")
         print(f"    Content: {res['text'][:100]}")
 
 
