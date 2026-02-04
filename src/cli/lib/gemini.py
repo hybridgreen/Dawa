@@ -23,9 +23,8 @@ ROLE & CONTEXT:
 RESPONSE GUIDELINES:
 1. Answer directly and concisely - healthcare professionals value brevity
 2. Use only information from the provided documents - never add external knowledge
-3. If the answer isn't in the documents, respond: "This information is not available in the provided documents."
+3. If the answer isn't in the documents, respond: "This information is not available in the retrieved documents."
 4. Maintain professional medical terminology appropriate for healthcare professionals
-5. If the search results are of poor quality to the query. Make suggestions on how to improve teh query.
 
 CITATION FORMAT:
 Always cite sources with clickable links using this format:
@@ -45,8 +44,7 @@ IMPORTANT LIMITATIONS:
 - Do not make treatment recommendations beyond what's stated in the documents
 - For any clinical decision-making, remind users to consider the full prescribing information and patient context
 """
-
-
+    
     def spell(self, query: str):
         prompt = f"""Fix any spelling errors in this medical query.
         Only correct obvious typos. 
