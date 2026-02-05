@@ -12,21 +12,10 @@ from lib.medicine_data import (
 
 from lib.utils import tokenise_string
 from lib.gemini import gemini_ai
+from config import config as cfg
 
 app = typer.Typer(help="Semantic Search CLI")
 gemini = gemini_ai("gemini-2.5-flash")
-
-# Starter model, 384 dims
-#model = "all-MiniLM-L6-v2"
-
-# 768 dims, better quality
-# model = 'sentence-transformers/all-mpnet-base-v2'
-
-# 1024 dims, medical-focused
-model = 'BAAI/bge-large-en-v1.5'
-
-# 1024 dims, specifically for biomedical
-#model = 'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb'
 
 @app.command()
 def verify():
@@ -80,16 +69,6 @@ def build_documents(rebuild: Annotated[bool, typer.Option("--rebuild")] = False)
 @app.command()
 def build_embeddings():
     """Builds embeddings for all pdfs found in the download folder
-
-    Available models
-    'all-MiniLM-L6-v2'- 384 dims
-
-    'all-mpnet-base-v2' - 768 dims, better quality
-
-    'BAAI/bge-large-en-v1.5' - 1024 dims, medical-focused
-
-    'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb' 1024 dims, specifically for biomedical
-
     """
     documents = load_cached_docs()
 
@@ -98,7 +77,7 @@ def build_embeddings():
             "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf", rebuild=True
         )
 
-    sem = ChunkedSemanticSearch(model)
+    sem = ChunkedSemanticSearch(cfg.model)
     sem.build_chunk_embeddings(documents)
 
 

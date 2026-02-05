@@ -13,7 +13,7 @@ import re
 from .utils import fix_encoding_errors
 
 
-cache_path = Path(__file__).parent.parent.parent / "cache"
+cache_path = Path(__file__).parent.parent / "cache"
 metadata_path = cache_path / "medicine_metadata.json"
 not_found_path = cache_path / "missing_medicine.json"
 documents_path = cache_path / "medicine_docs.json"

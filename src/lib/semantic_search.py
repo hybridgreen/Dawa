@@ -170,7 +170,7 @@ class SemanticSearch:
         self.documents = None
         self.docmap = {}
         self.doc_metadata = {}
-        self.cache_path = Path(__file__).parent.parent.parent / "cache"
+        self.cache_path = Path(__file__).parent.parent / "cache"
         self.metadata_path = self.cache_path / "medicine_metadata.json"
         self.embeddings_path = (
             self.cache_path / f"chunk_embeddings_{model_name.replace('/', '-')}.npy"
