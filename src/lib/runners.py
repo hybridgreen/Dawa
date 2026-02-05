@@ -1,7 +1,6 @@
 import typer
 from typing import Annotated
 from lib.hybrid_search import HybridSearch
-
 from lib.medicine_data import process_all_pdfs, load_cached_docs
 
 

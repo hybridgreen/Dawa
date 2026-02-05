@@ -1,5 +1,5 @@
 import typer
-from runners import run_hybrid_search
+from lib.runners import run_hybrid_search
 from typing import Annotated
 from lib.semantic_search import ChunkedSemanticSearch, verify_model, split_by_headers
 from lib.medicine_data import (
