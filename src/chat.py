@@ -1,6 +1,6 @@
 import streamlit as st
 from lib.gemini import gemini_ai
-from runners import run_hybrid_search
+from lib.runners import run_hybrid_search
 from google.genai import types
 
 def hybrid_stream(query: str, limit: int = 5):
