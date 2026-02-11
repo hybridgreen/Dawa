@@ -1,8 +1,8 @@
 import typer
 from typing import Annotated
-from lib.hybrid_search import HybridSearch
-from lib.medicine_data import process_all_pdfs, load_cached_docs
-from config import config as cfg
+from src.lib.hybrid_search import HybridSearch
+from src.lib.medicine_data import process_all_pdfs, load_cached_docs
+from src.config import config as cfg
 
 
 def run_hybrid_search(

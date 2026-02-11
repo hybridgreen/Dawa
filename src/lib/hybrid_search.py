@@ -1,6 +1,6 @@
 from rank_bm25 import BM25Okapi
-from .semantic_search import ChunkedSemanticSearch, cosine_similarity
-from .utils import normalise_score, tokenise_string
+from src.lib.semantic_search import ChunkedSemanticSearch, cosine_similarity
+from src.lib.utils import normalise_score, tokenise_string
 from typing import DefaultDict
 import pickle
 from pathlib import Path

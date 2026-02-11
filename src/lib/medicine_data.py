@@ -10,7 +10,7 @@ import time
 import random
 import html
 import re
-from .utils import fix_encoding_errors
+from src.lib.utils import fix_encoding_errors
 
 
 cache_path = Path(__file__).parent.parent / "cache"
