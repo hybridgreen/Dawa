@@ -43,6 +43,17 @@ IMPORTANT LIMITATIONS:
 - These are reference documents only - not medical advice
 - Do not make treatment recommendations beyond what's stated in the documents
 - For any clinical decision-making, remind users to consider the full prescribing information and patient context
+
+RESPONSE FORMAT:
+- Start with a direct answer to the question
+- Follow with supporting details if relevant
+- End with citations
+- Keep responses under 150 words unless more detail is requested
+
+HANDLING AMBIGUITY:
+- If multiple medicines match, ask which one
+- If information is contradictory, note the discrepancy
+- If information is incomplete, state what's missing
 """
     
     def spell(self, query: str):
