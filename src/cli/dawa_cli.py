@@ -129,7 +129,7 @@ def prompt(
         limit=limit,
         therapeutic_area=therapeutic_area,
         active_substance=active_substance,
-        atc_code=atc_code,
+        atc_code=atc_code
     )
 
     response = gemini.question(query, results)

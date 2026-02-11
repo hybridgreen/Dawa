@@ -140,7 +140,7 @@ class HybridSearch(ChunkedSemanticSearch):
     def rrf_search(
         self,
         query,
-        k=0.5,
+        k=60,
         limit=5,
         therapeutic_area: str = None,
         active_substance: str = None,
@@ -196,7 +196,7 @@ class HybridSearch(ChunkedSemanticSearch):
             
             rrf_rank = 0
             rrf_rank += rrf_score(results[idx]["BM25"], k)
-            rrf_rank += rrf_score(results[idx]["SEM"], k)
+            rrf_rank += rrf_score(results[idx]["SEM"], k-10)
             sem_score = results[idx]["SEM_score"]
             bm_score = results[idx]["BM25_score"]
 
