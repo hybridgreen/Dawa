@@ -1,25 +1,27 @@
 import re
 from nltk.stem import PorterStemmer
 from pathlib import Path
+import os
 
 stemmer = PorterStemmer()
 
-cache_path = Path(__file__).parent.parent.parent / "cache"
+cache_path = Path(__file__).parent.parent / "cache"
 embeddings_path = cache_path / "drug_embeddings.npy"
 metadata_path = cache_path / "drug_metadata.json"
-
+stopwords_path =cache_path / "stopwords.txt"
 
 def load_stopwords():
-    stopwords_path = (
-        "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/stopwords.txt"
-    )
-    try:
-        with open(stopwords_path, "r") as f:
-            data = f.read()
-            words = data.splitlines()
-            return words
-    except Exception as e:
-        print(f"Error loading stopwords: {str(e)}")
+    
+    if stopwords_path.exists():
+        try:
+            with open(stopwords_path, "r") as f:
+                data = f.read()
+                words = data.splitlines()
+                return words
+        except Exception as e:
+            print(f"Error loading stopwords: {str(e)}")
+    else:
+        raise Exception("Unable to load stopwords")
 
 
 stemmer = PorterStemmer()
