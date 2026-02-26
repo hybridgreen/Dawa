@@ -43,10 +43,10 @@ Filter by Therapeutic Area, Active Substance, direct ATC Classification: Pharmac
 
 ## Tech Stack
 
-Backend : FastAPI, Uvicorn
-Search & ML : Sentence Transformers: BAAI/BGE-Large-EN-v1.5, rank-bm25: Okapi BM25 implementation for keyword search, NumPy
-Data Processing: PyMuPDF: PDF text extraction and document parsing
-Infrastructure: Docker, uv(Astral), GCP: Google Cloud Run, Artifact Registry
+>> - Backend : FastAPI, Uvicorn
+>> - Search & ML : Sentence Transformers: BAAI/BGE-Large-EN-v1.5, rank-bm25: Okapi BM25, NumPy
+>> - Data Processing: PyMuPDF: PDF text extraction and document parsing
+>> - Infrastructure: Docker, uv(Astral), GCP: Google Cloud Run, Artifact Registry
 
 
 ## Design Decisions
