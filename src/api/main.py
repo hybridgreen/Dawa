@@ -56,8 +56,6 @@ def message( data: ChatForm
         k=60,
         limit=5
     )
-
-    print("Retrieved documents:", results)
     
     response = gemini.question(query, results)
 
