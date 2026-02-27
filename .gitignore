@@ -215,3 +215,5 @@ __marimo__/
 */cache
 */.DS_Store
 .DS_Store
+
+ui/node_modules

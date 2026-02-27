@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Markdown response styling */
+.prose-response p { @apply mb-3 leading-relaxed; }
+.prose-response ul { @apply mb-3 ml-4 list-disc; }
+.prose-response ol { @apply mb-3 ml-4 list-decimal; }
+.prose-response li { @apply mb-1; }
+.prose-response strong { @apply font-semibold; }
+.prose-response a { @apply text-blue-600 underline underline-offset-2 hover:text-blue-800; }
+.prose-response code { @apply rounded bg-muted px-1 py-0.5 font-mono text-sm; }
