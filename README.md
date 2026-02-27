@@ -98,7 +98,7 @@ Decision: Containerize with Docker, deploy on Google Cloud Run
 Rationale:
 Serverless scaling: 0-10 instances
 Global reach & User Testing: Multi-region deployment for low latency
-Cost efficiency: Pay only for actual usage (~$5-15/month)
+Cost efficiency: Pay only for actual usage (~£5/month)
 Developer experience: Simple deployments with gcloud run deploy
 
 Trade-offs:
