@@ -115,7 +115,7 @@ Rationale:
 - Medical Domain: BGE-Large trained on scientific/medical text
 - Embedding Quality: 1024 dimensions capture nuanced relationships
 - Benchmark Results: 5-7% better retrieval accuracy vs. all-MiniLM-L6-v2
-- Deployment Reality: 1.3GB acceptable for cloud deployment
+- Size: 1.3GB acceptable for cloud deployment
 
 Trade-offs:
 - ✅ Pro: Best-in-class retrieval quality for medical queries
