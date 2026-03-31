@@ -37,9 +37,9 @@ Filter by Therapeutic Area, Active Substance, direct ATC Classification: Pharmac
 
 ## Phase 2: Enhanced Intelligence
 
-[] Multi-language Support: French language search for Francophone West Africa
-[] Agentic Search: A simple text query runs filtered search
-[] Voice Search: Audio queries for hands-free operation in clinical settings
+- [ ] Multi-language Support: French language search for Francophone West Africa
+- [ ] Agentic Search: A simple text query runs filtered search
+- [ ] Voice Search: Audio queries for hands-free operation in clinical settings
 
 ## Tech Stack
 
