@@ -10,7 +10,7 @@ import time
 import random
 import html
 import re
-from src.lib.utils import fix_encoding_errors
+from lib.utils import fix_encoding_errors
 
 
 cache_path = Path(__file__).parent.parent / "cache"
@@ -24,7 +24,6 @@ class RateLimitException(Exception):
 
 
 #DOWNLOADING
-
 def verify_pdf(pdf_path: str) -> bool:
     try:
         file_size = Path(pdf_path).stat().st_size
@@ -60,7 +59,7 @@ def verify_pdf(pdf_path: str) -> bool:
 def fetch_pdf(
     url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
 ):
-    file_path = Path(__file__).parent.parent.parent.parent / (
+    file_path = Path(__file__).parent.parent.parent / (
         f"./data/{filename}.{extension}"
     )
 
@@ -173,7 +172,6 @@ def download_pdfs(data_path: str, n_rows: int = 0):
 
     dl_count = 0
     # start_time = datetime.now()
-    total_requests = 0
     missing = []
     for raw in medicines_to_process:
         try:
@@ -190,8 +188,6 @@ def download_pdfs(data_path: str, n_rows: int = 0):
 
             pdf_url = f"https://www.ema.europa.eu/en/documents/product-information/{url_code}-epar-product-information_en.pdf"
             pdf_path = fetch_pdf(pdf_url, f"pdf/{ema_number}-en", "pdf")
-
-            total_requests += 1
             # elapsed = (datetime.now() - start_time).total_seconds()
 
             if not pdf_path or not verify_pdf(pdf_path):
@@ -211,7 +207,7 @@ def download_pdfs(data_path: str, n_rows: int = 0):
             sys.exit()
 
         except Exception as e:
-            print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {e}")
+            print(f" ✗ Error processing {raw.get('name_of_medicine', 'unknown')}: {str(e)}")
             try:
                 metadata = construct_metadata(raw)
                 metadata["updated_at"] = None
@@ -301,6 +297,7 @@ def clean_corpus(text: str):
 
 
 def process_all_pdfs(folder_path: str, rebuild: bool = True):
+    
     pdf_dir = Path(folder_path)
 
     if not pdf_dir.exists():
@@ -470,7 +467,7 @@ def construct_metadata(raw: dict) -> MedicineMetadata:
         "biosimilar": to_bool(raw["biosimilar"]),
         "conditional_approval": to_bool(raw["conditional_approval"]),
         "exceptional_circumstances": to_bool(raw["exceptional_circumstances"]),
-        "generic_or_hybrid": to_bool(raw["generic_or_hybrid"]),
+        "generic_or_hybrid": to_bool(raw["generic"]),
         "orphan_medicine": to_bool(raw["orphan_medicine"]),
         "prime_priority_medicine": to_bool(raw["prime_priority_medicine"]),
         "opinion_status": raw["opinion_status"],

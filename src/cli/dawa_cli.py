@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 import typer
 from lib.runners import run_hybrid_search
 from typing import Annotated
@@ -21,23 +25,6 @@ gemini = gemini_ai("gemini-2.5-flash")
 def verify():
     """Verify the model"""
     verify_model()
-
-
-@app.command()
-def split_pdf(filepath: str):
-    markdown = pdf_to_md(filepath)
-    print(f"Extracted {len(markdown)} characters")
-
-    sections = split_by_headers(markdown)
-    print(f"Found {len(sections)} sections")
-
-    for section in sections:
-        print(
-            section["section_number"],
-            section["section_title"],
-            section["content"][0:100],
-        )
-
 
 @app.command()
 def tokenise(text: str):

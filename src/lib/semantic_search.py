@@ -4,7 +4,7 @@ import os
 import numpy as np
 import re
 import json
-from src.lib.medicine_data import load_cached_docs
+from lib.medicine_data import load_cached_docs
 
 
 def clean_for_embedding(text: str) -> str:
