@@ -6,7 +6,6 @@ import pickle
 from pathlib import Path
 
 
-
 def hybrid_score(bm25_score, semantic_score, alpha=0.5):
     return alpha * bm25_score + (1 - alpha) * semantic_score
 
@@ -22,7 +21,7 @@ class HybridSearch(ChunkedSemanticSearch):
         self.index_path = self.cache_path / "bm25_index.pkl"
         self.load_or_create_chunk_embeddings(documents)
         self.bm25 = None
-        self.load_index()
+        self.build_or_load_index()
 
     def build_index(self):
         tokenized_texts = [
@@ -42,7 +41,7 @@ class HybridSearch(ChunkedSemanticSearch):
         except Exception as e:
             print(f"Failed to save BM25 Index: {e}")
 
-    def load_index(self):
+    def build_or_load_index(self):
         
         if Path(self.index_path).exists():
             try:

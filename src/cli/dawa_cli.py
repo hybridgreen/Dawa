@@ -6,11 +6,11 @@ import typer
 from lib.runners import run_hybrid_search
 from typing import Annotated
 from lib.semantic_search import ChunkedSemanticSearch, verify_model, split_by_headers
+from lib.hybrid_search import HybridSearch
 from lib.medicine_data import (
     download_med_data,
     download_pdfs,
     process_all_pdfs,
-    pdf_to_md,
     load_cached_docs,
 )
 
@@ -64,8 +64,9 @@ def build_embeddings():
             "/Users/yasseryaya-oye/workspace/hybridgreen/dawa/data/pdf", rebuild=True
         )
 
-    sem = ChunkedSemanticSearch(cfg.model)
-    sem.build_chunk_embeddings(documents)
+    search = HybridSearch(documents= documents, model_name=cfg.model)
+    search.build_chunk_embeddings(documents)
+    search.build_index()
 
 
 @app.command()
