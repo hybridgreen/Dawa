@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Tests
+tests/
+
+# Data / local artifacts
+data/
+
+# UI
+ui/
+
+# Dev / tooling
+.git/
+.gitignore
+.env*
+*.md
+deploy.sh
+src/cli
+
+# IDE
+.vscode/
+.idea/

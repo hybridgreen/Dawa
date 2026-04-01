@@ -9,5 +9,6 @@ gcloud run deploy dawa \
     --memory 8Gi \
     --cpu=2 \
     --allow-unauthenticated && \
- gcloud run services update-traffic dawa --to-latest
+ gcloud run services update-traffic dawa --to-latest &&\
+ gcloud config set run/region europe-west9
      

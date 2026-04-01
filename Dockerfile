@@ -1,17 +1,15 @@
-FROM python:3.11
+FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin/:$PATH"
+RUN pip install uv
 
-COPY pyproject.toml  uv.lock ./
+COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen
+RUN uv sync --frozen --verbose
 RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-large-en-v1.5')"
 
 ARG CACHEBUST=1
-
 COPY ./src ./src
 
 EXPOSE 8000
