@@ -9,8 +9,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --verbose
 RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-large-en-v1.5')"
 
+COPY ./src/api ./src/api
+COPY ./src/lib ./src/lib
+COPY ./src/config.py ./src/config.py
+
 ARG CACHEBUST=1
-COPY ./src ./src
+COPY ./src/cache ./src/cache
 
 EXPOSE 8000
 

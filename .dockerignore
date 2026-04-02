@@ -22,7 +22,6 @@ ui/
 .env*
 *.md
 deploy.sh
-src/cli
 
 # IDE
 .vscode/
