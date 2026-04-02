@@ -1,7 +1,6 @@
 import re
 from nltk.stem import PorterStemmer
 from pathlib import Path
-import os
 
 stemmer = PorterStemmer()
 
@@ -24,14 +23,7 @@ def load_stopwords():
         raise Exception("Unable to load stopwords")
 
 
-stemmer = PorterStemmer()
-
-
 def tokenise_string(text: str) -> list[str]:
-    """
-    Tokenize and normalize text for BM25.
-    Handles markdown, medical symbols, and punctuation.
-    """
     text = text.lower()
 
     text = re.sub(r"\*+", " ", text)
@@ -44,12 +36,6 @@ def tokenise_string(text: str) -> list[str]:
     tokens = [stemmer.stem(t) for t in tokens]
 
     return tokens
-
-
-def normalise_score(score, min_scores, max_scores):
-    if min_scores == max_scores:
-        return 1.0
-    return (score - min_scores) / (max_scores - min_scores)
 
 
 def fix_encoding_errors(text: str) -> str:
