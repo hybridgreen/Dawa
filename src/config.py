@@ -31,29 +31,18 @@ class S3Config:
 class AppConfig:
     def __init__(
         self,
-        auth: AuthConfig,
-        s3_config: S3Config,
         env: str,
-        model: str
+        model: str,
+        med_data_url:str
     ):
-        self.auth = auth
         self.environment = env
-        self.s3 = s3_config
         self.model = model
+        self.med_data_url = med_data_url
 
 
 config = AppConfig(
-    auth=AuthConfig(
-        secret=EnvOrThrow("SERVER_SECRET"), admin_token=EnvOrThrow("ADMIN_TOKEN")
-    ),
-    s3_config=S3Config(
-        region=EnvOrThrow("AWS_REGION"),
-        access_key=EnvOrThrow("AWS_ACCESS_KEY_ID"),
-        secret_key=EnvOrThrow("AWS_SECRET_ACCESS_KEY_ID"),
-        bucket=EnvOrThrow("AWS_BUCKET"),
-        token=EnvOrThrow("AWS_TOKEN"),
-    ),
     env=EnvOrThrow("ENVIRONMENT"),
-    model= EnvOrThrow("EMBEDDING_MODEL")
+    model= EnvOrThrow("EMBEDDING_MODEL"),
+    med_data_url=EnvOrThrow("MEDICINE_DATA_URL")
     
 )

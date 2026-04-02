@@ -39,9 +39,7 @@ def tokenise(text: str):
 def download(n_rows: Annotated[int, typer.Argument()] = 0):
     """Download medical pdf data from the EMA Website - Only available in the EU/UK"""
     
-    med_data_url = "https://www.ema.europa.eu/en/documents/report/medicines-output-medicines_json-report_en.json"
-    
-    med_data_path = download_med_data(med_data_url)
+    med_data_path = download_med_data(cfg.med_data_url)
 
     download_pdfs(med_data_path, n_rows)
 
@@ -71,35 +69,6 @@ def build_embeddings():
 
 @app.command()
 def search(
-    query: Annotated[str, typer.Argument(help="Search query")],
-    limit: Annotated[int, typer.Option("--limit", "-l", help="Number of results")] = 5,
-    therapeutic_area: Annotated[
-        str, typer.Option("--therapeutic-area", "-t", help="Filter by therapeutic area")
-    ] = None,
-    active_substance: Annotated[
-        str, typer.Option("--active-substance", "-a", help="Filter by active substance")
-    ] = None,
-    atc_code: Annotated[str, typer.Option("--atc", help="Filter by ATC code")] = None,
-):
-    """Search the datasets for relevant matches, uses AI to enhance the search and answer the question"""
-
-    results = run_hybrid_search(
-        query=query,
-        limit=limit,
-        therapeutic_area=therapeutic_area,
-        active_substance=active_substance,
-        atc_code=atc_code,
-    )
-
-    for idx, res in enumerate(results, 1):
-        print(f"{idx}. Medicine name: {res['name']}")
-        print(f"    Retrieved section: {res['section']}")
-        print(f"    RRF Score: {res['RRF']}")
-        print(f"    Content: {res['text'][:100]}")
-
-
-@app.command()
-def prompt(
     query: Annotated[str, typer.Argument(help="Search query")],
     limit: Annotated[int, typer.Option("--limit", "-l", help="Number of results")] = 5,
     therapeutic_area: Annotated[
