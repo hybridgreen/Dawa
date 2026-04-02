@@ -10,8 +10,6 @@ import time
 import random
 import html
 import re
-from lib.utils import fix_encoding_errors
-
 
 cache_path = Path(__file__).parent.parent / "cache"
 metadata_path = cache_path / "medicine_metadata.json"
@@ -239,19 +237,11 @@ def pdf_to_md(pdf_path: str):
 
 
 def clean_corpus(text: str):
+    text = text.lower()
     text = re.sub(r"\\n", " ", text)
     text = re.sub(r"\n", " ", text)
-    text = re.sub(r"\s+", " ", text)
-
-    text = fix_encoding_errors(text)
-
     text = html.unescape(text)
-
-    try:
-        text = text.encode().decode("unicode_escape")
-    except (UnicodeDecodeError, UnicodeEncodeError):
-        raise ValueError("Unable to decode text")
-
+    
     replacements = {
         # Degree (°)
         "°c": " degrees celsius ",
@@ -277,6 +267,7 @@ def clean_corpus(text: str):
         "β": " beta ",
         "γ": " gamma ",
         "Δ": " delta ",
+        "μ": " micro ",
         # Fractions
         "½": " one half ",
         "¼": " one quarter ",
@@ -289,9 +280,8 @@ def clean_corpus(text: str):
     for symbol, word in replacements.items():
         text = text.replace(symbol, word)
 
-    text = re.sub(
-        r"\\u[a-z\d]+", " ", text
-    )  # Remove any unprocessed unicode characters
+    text = re.sub(r"\\u[0-9a-fA-F]{4}", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
@@ -332,7 +322,7 @@ def process_all_pdfs(folder_path: str, rebuild: bool = True):
 
             print(f"\nProcessing file: {pdf_file.name} - {file_count}/{len(pdf_files)}")
 
-            markdown = pdf_to_md(str(pdf_file)).lower()
+            markdown = pdf_to_md(str(pdf_file))
 
             if markdown:
                 documents.append(
