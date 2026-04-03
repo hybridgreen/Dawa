@@ -57,7 +57,8 @@ def verify_pdf(pdf_path: str) -> bool:
 def fetch_pdf(
     url: str, filename: str = "file", extension: str = "pdf", max_retries: int = 5
 ):
-    file_path = Path(__file__).parent.parent.parent / (
+    
+    file_path = Path(__file__).parent.parent.parent.parent.parent / (
         f"./data/{filename}.{extension}"
     )
 
@@ -94,7 +95,7 @@ def fetch_pdf(
                 retry_after = res.headers.get("Retry-After")
                 wait_time = int(retry_after)
             except Exception:
-                wait_time = base_delay * (2**attempt) + random.uniform(0, 1)
+                wait_time = base_delay * (2**attempt) + 2*random.uniform(0, 1)
                 print(f"Waiting {wait_time}s, before retry.")
             time.sleep(wait_time)
         else:
@@ -117,11 +118,13 @@ def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
         return True
 
     updated_at = metadata.get("updated_at")
-    if not updated_at:
+    
+    if updated_at == "":
         return False
 
     last_update_str = raw.get("last_updated_date", "").strip()
-    if not last_update_str:
+    
+    if last_update_str == "":
         return True
 
     try:
@@ -137,7 +140,7 @@ def skip_download(ema_number: str, raw: dict, doc_metadata: dict) -> bool:
 
 def download_med_data(med_data_url: str) -> str:
     print("Downloading Medicine Data")
-    file_path = Path(__file__).parent.parent.parent.parent / (
+    file_path = Path(__file__).parent.parent.parent.parent.parent / (
         "./data/medicine_data_en.json"
     )
     headers = {"user-agent": "dawa/0.0.1"}
@@ -161,6 +164,7 @@ def download_med_data(med_data_url: str) -> str:
 
 
 def download_pdfs(data_path: str, n_rows: int = 0):
+    
     doc_metadata = load_metadata(metadata_path)
 
     with open(data_path, "r") as f:
